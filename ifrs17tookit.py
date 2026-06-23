@@ -162,15 +162,6 @@ if 'page' not in st.session_state:
 if 'breadcrumb' not in st.session_state:
     st.session_state.breadcrumb = ['Home']
 
-# Counter for generating unique button keys
-if 'key_counter' not in st.session_state:
-    st.session_state.key_counter = 0
-
-def get_unique_key(base):
-    """Generate a unique key using an incrementing counter."""
-    st.session_state.key_counter += 1
-    return f"{base}_{st.session_state.key_counter}"
-
 # =============================================================================
 #  NAVIGATION FUNCTIONS
 # =============================================================================
@@ -209,18 +200,19 @@ def show_breadcrumb():
         st.markdown(f'<div class="breadcrumb">{breadcrumb_html}</div>', unsafe_allow_html=True)
 
 # =============================================================================
-#  BACK BUTTON — FIXED (uses page-based key that stays constant)
+#  BACK BUTTON — Uses stable key based on current page + target
 # =============================================================================
 
 def back_button(target_page, target_breadcrumb):
     st.markdown("<br>", unsafe_allow_html=True)
-    # Use the target_page as part of the key — this is stable for a given page
-    if st.button("Back", key=f"back_btn_{target_page}"):
+    # Key is based on the CURRENT page going back to a specific TARGET
+    current = st.session_state.page
+    if st.button("Back", key=f"back_{current}_to_{target_page}"):
         navigate_to(target_page, target_breadcrumb)
         st.rerun()
 
 # =============================================================================
-#  PAGE RENDERERS — NAVIGATION MENUS
+#  PAGE RENDERERS — NAVIGATION MENUS (Static keys for nav buttons)
 # =============================================================================
 
 def render_home():
@@ -236,11 +228,11 @@ def render_home():
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="card"><h3>LRC — Liability for Remaining Coverage</h3><p>Unexpired risk reserve calculations for premium liabilities.</p><p style="font-size:0.85rem;color:#666;">UPR Calculator | Loss Component</p></div>', unsafe_allow_html=True)
-        if st.button("Go to LRC Calculators", key=get_unique_key("btn_lrc")):
+        if st.button("Go to LRC Calculators", key="nav_home_lrc"):
             navigate_to('lrc', ['Home', 'LRC']); st.rerun()
     with col2:
         st.markdown('<div class="card"><h3>LIC — Liability for Incurred Claims</h3><p>Outstanding claims reserves, IBNR, ULAE, Risk Adjustment, and more.</p><p style="font-size:0.85rem;color:#666;">Fulfilment Cashflows | Risk Adjustment</p></div>', unsafe_allow_html=True)
-        if st.button("Go to LIC Calculators", key=get_unique_key("btn_lic")):
+        if st.button("Go to LIC Calculators", key="nav_home_lic"):
             navigate_to('lic', ['Home', 'LIC']); st.rerun()
 
     st.markdown("<br><br>", unsafe_allow_html=True)
@@ -253,11 +245,11 @@ def render_lrc():
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="card"><h3>UPR Calculator</h3><p>Unearned Premium Reserve — 365th, 24th, and 8th methods with data quality checks.</p></div>', unsafe_allow_html=True)
-        if st.button("Open UPR Calculator", key=get_unique_key("btn_upr")):
+        if st.button("Open UPR Calculator", key="nav_lrc_upr"):
             navigate_to('upr_calculator', ['Home', 'LRC', 'UPR Calculator']); st.rerun()
     with col2:
         st.markdown('<div class="card"><h3>Loss Component</h3><p>Calculate Loss Ratio, Commission Ratio, Expense Ratio, Combined Ratio, and Loss Component.</p></div>', unsafe_allow_html=True)
-        if st.button("Open Loss Component", key=get_unique_key("btn_loss_comp")):
+        if st.button("Open Loss Component", key="nav_lrc_loss"):
             navigate_to('loss_component', ['Home', 'LRC', 'Loss Component']); st.rerun()
     back_button('home', ['Home'])
 
@@ -268,11 +260,11 @@ def render_lic():
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="card"><h3>Fulfilment Cashflows</h3><p>OCR, IBNR (6 methods), ULAE, and NPR calculators.</p></div>', unsafe_allow_html=True)
-        if st.button("Fulfilment Cashflows", key=get_unique_key("btn_fulfilment")):
+        if st.button("Fulfilment Cashflows", key="nav_lic_fulfil"):
             navigate_to('fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows']); st.rerun()
     with col2:
         st.markdown('<div class="card"><h3>Risk Adjustment</h3><p>Mack, Bootstrap, VaR, and Cost of Capital methods.</p></div>', unsafe_allow_html=True)
-        if st.button("Risk Adjustment", key=get_unique_key("btn_ra")):
+        if st.button("Risk Adjustment", key="nav_lic_ra"):
             navigate_to('risk_adjustment', ['Home', 'LIC', 'Risk Adjustment']); st.rerun()
     back_button('home', ['Home'])
 
@@ -283,17 +275,17 @@ def render_fulfilment_cashflows():
     st.markdown("Select a calculator from the options below:")
     st.markdown("<br>", unsafe_allow_html=True)
     cols = st.columns(4)
-    calculators = [
-        ("OCR", "Outstanding Claims Reserve", "ocr_calculator", "OCR Calculator"),
-        ("IBNR", "Incurred But Not Reported", "ibnr_menu", "IBNR Methods"),
-        ("ULAE", "Unallocated Loss Adjustment Expenses", "ulae_calculator", "ULAE Calculator"),
-        ("NPR", "Non-Performance Risk", "npr_calculator", "NPR Calculator"),
+    items = [
+        ("OCR", "Outstanding Claims Reserve", "ocr_calculator"),
+        ("IBNR", "Incurred But Not Reported", "ibnr_menu"),
+        ("ULAE", "Unallocated Loss Adjustment Expenses", "ulae_calculator"),
+        ("NPR", "Non-Performance Risk", "npr_calculator"),
     ]
-    for i, (title, desc, page, breadcrumb) in enumerate(calculators):
+    for i, (title, desc, page) in enumerate(items):
         with cols[i]:
             st.markdown(f'<div class="card"><h3>{title}</h3><p>{desc}</p></div>', unsafe_allow_html=True)
-            if st.button("Open", key=get_unique_key(f"btn_{page}")):
-                navigate_to(page, ['Home', 'LIC', 'Fulfilment Cashflows', breadcrumb]); st.rerun()
+            if st.button("Open", key=f"nav_fc_{page}"):
+                navigate_to(page, ['Home', 'LIC', 'Fulfilment Cashflows', title]); st.rerun()
     back_button('lic', ['Home', 'LIC'])
 
 
@@ -318,7 +310,7 @@ def render_ibnr_menu():
                 name, desc, page = methods[idx]
                 with cols[j]:
                     st.markdown(f'<div class="card"><h3>{name}</h3><p>{desc}</p></div>', unsafe_allow_html=True)
-                    if st.button("Open", key=get_unique_key(f"btn_{page}")):
+                    if st.button("Open", key=f"nav_ibnr_{page}"):
                         navigate_to(page, ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods', name]); st.rerun()
     back_button('fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
 
@@ -338,7 +330,7 @@ def render_risk_adjustment():
     for i, (name, desc, page) in enumerate(methods):
         with cols[i]:
             st.markdown(f'<div class="card"><h3>{name}</h3><p>{desc}</p></div>', unsafe_allow_html=True)
-            if st.button("Open", key=get_unique_key(f"btn_{page}")):
+            if st.button("Open", key=f"nav_ra_{page}"):
                 navigate_to(page, ['Home', 'LIC', 'Risk Adjustment', name]); st.rerun()
     back_button('lic', ['Home', 'LIC'])
 
@@ -353,135 +345,118 @@ def render_upr_calculator():
     st.markdown('<div class="main-container">', unsafe_allow_html=True)
 
     col1, col2, col3, col4 = st.columns(4)
-    with col1: valuation_date = st.date_input("Valuation Date", value=date(2025, 12, 31))
-    with col2: client_name = st.text_input("Client Name (for file name)", value="Client").strip()
-    with col3: method = st.selectbox("UPR Calculation Method", ["365th (exact days)", "24th (half-month)", "8th (half-quarter)"])
+    with col1: valuation_date = st.date_input("Valuation Date", value=date(2025, 12, 31), key="upr_val_date")
+    with col2: client_name = st.text_input("Client Name (for file name)", value="Client", key="upr_client").strip()
+    with col3: method = st.selectbox("UPR Calculation Method", ["365th (exact days)", "24th (half-month)", "8th (half-quarter)"], key="upr_method")
     with col4: pass
     valuation_date = pd.to_datetime(valuation_date)
-    uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls"])
+    uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls"], key="upr_file")
 
     if uploaded_file is not None:
         try:
             original_filename = uploaded_file.name
             base_filename = re.sub(r'\.[^.]*$', '', original_filename)
-            file_extension = uploaded_file.name.split('.')[-1].lower()
-            if file_extension == 'csv':
+            ext = uploaded_file.name.split('.')[-1].lower()
+            if ext == 'csv':
                 try: df = pd.read_csv(uploaded_file, encoding='utf-8')
-                except UnicodeDecodeError:
-                    uploaded_file.seek(0); df = pd.read_csv(uploaded_file, encoding='cp1252')
-                    st.info("File read with Windows-1252 encoding.")
+                except UnicodeDecodeError: uploaded_file.seek(0); df = pd.read_csv(uploaded_file, encoding='cp1252')
             else: df = pd.read_excel(uploaded_file)
             unnamed = [c for c in df.columns if c.startswith('Unnamed:')]
-            if unnamed: df = df.drop(columns=unnamed); st.info(f"Dropped {len(unnamed)} unnamed column(s).")
+            if unnamed: df = df.drop(columns=unnamed)
             st.markdown("#### Preview of uploaded data"); st.dataframe(df.head()); st.markdown("---")
             st.markdown("### Map Your Columns to Required Fields")
             all_columns = df.columns.tolist()
             req_col1, req_col2 = st.columns(2)
             with req_col1:
-                st.markdown('<div class="required-container"><h3>Start_Date</h3><p>The date when the policy starts (origin period)</p></div>', unsafe_allow_html=True)
-                start_date_col = st.selectbox("Select your Start Date column", options=[""] + all_columns, key=get_unique_key("start_date"), label_visibility="collapsed")
+                st.markdown('<div class="required-container"><h3>Start_Date</h3><p>The date when the policy starts</p></div>', unsafe_allow_html=True)
+                start_date_col = st.selectbox("Start Date column", options=[""] + all_columns, key="upr_start", label_visibility="collapsed")
                 if start_date_col == "": start_date_col = None
             with req_col2:
-                st.markdown('<div class="required-container"><h3>End_Date</h3><p>The date when the policy ends (development period)</p></div>', unsafe_allow_html=True)
-                end_date_col = st.selectbox("Select your End Date column", options=[""] + all_columns, key=get_unique_key("end_date"), label_visibility="collapsed")
+                st.markdown('<div class="required-container"><h3>End_Date</h3><p>The date when the policy ends</p></div>', unsafe_allow_html=True)
+                end_date_col = st.selectbox("End Date column", options=[""] + all_columns, key="upr_end", label_visibility="collapsed")
                 if end_date_col == "": end_date_col = None
             st.markdown("---")
-            st.markdown('<div class="grouping-container"><h3>Grouping Columns</h3><p>Select the columns you want to group by (e.g., Line_of_Business, Currency). Results will be aggregated by these columns.</p></div>', unsafe_allow_html=True)
+            st.markdown('<div class="grouping-container"><h3>Grouping Columns</h3><p>Select columns to group by (e.g., Line_of_Business).</p></div>', unsafe_allow_html=True)
             grouping_options = [col for col in all_columns if col not in [start_date_col, end_date_col]]
-            grouping_cols = st.multiselect("Choose columns to group results by (at least one required):", options=grouping_options, default=[grouping_options[0]] if grouping_options else [])
-            if not grouping_cols: st.error("Please select at least one grouping column."); st.stop()
-            st.markdown("---"); st.markdown("### Select Numeric Columns for UPR Calculation")
+            grouping_cols = st.multiselect("Group by (at least one):", options=grouping_options, default=[grouping_options[0]] if grouping_options else [], key="upr_group")
+            if not grouping_cols: st.error("Select at least one grouping column."); st.stop()
+            st.markdown("---"); st.markdown("### Select Numeric Columns")
             numeric_columns = []
             for col in df.columns:
                 if col in [start_date_col, end_date_col] + grouping_cols: continue
                 try: pd.to_numeric(df[col]); numeric_columns.append(col)
-                except (ValueError, TypeError): pass
-            numeric_columns = list(set(numeric_columns + [col for col in df.select_dtypes(include=[np.number]).columns.tolist() if col not in numeric_columns]))
+                except: pass
             if not numeric_columns: st.error("No numeric columns found."); st.stop()
-            selected_value_cols = st.multiselect("Choose the numeric columns you want to convert to UPR:", options=numeric_columns, default=numeric_columns[:min(4, len(numeric_columns))] if numeric_columns else [])
-            if not start_date_col or not end_date_col: st.error("Please map all required date columns."); st.stop()
-            if not selected_value_cols: st.warning("Please select at least one numeric column."); st.stop()
+            selected_value_cols = st.multiselect("Numeric columns:", options=numeric_columns, default=numeric_columns[:min(4, len(numeric_columns))], key="upr_vals")
+            if not start_date_col or not end_date_col: st.error("Map all required date columns."); st.stop()
+            if not selected_value_cols: st.warning("Select at least one numeric column."); st.stop()
 
             st.markdown("### Data Quality Checks")
             df_check = df.copy()
             df_check = df_check.rename(columns={start_date_col: 'Start_Date', end_date_col: 'End_Date'})
             df_check['Start_Date'] = pd.to_datetime(df_check['Start_Date'], errors='coerce')
             df_check['End_Date'] = pd.to_datetime(df_check['End_Date'], errors='coerce')
-            all_selected_cols = ['Start_Date', 'End_Date'] + grouping_cols + selected_value_cols
-            has_critical_errors = False; error_messages = []; warning_messages = []
+            all_selected = ['Start_Date', 'End_Date'] + grouping_cols + selected_value_cols
+            has_critical = False
 
-            st.markdown("#### 1. Missing Values Check")
-            missing_summary = {}
-            for col in all_selected_cols:
-                if col in df_check.columns: mc = df_check[col].isna().sum(); missing_summary[col] = mc
-                if mc > 0: warning_messages.append(f"Column '{col}' has {mc} missing value(s).")
-            st.dataframe(pd.DataFrame(list(missing_summary.items()), columns=['Column', 'Missing Values']), use_container_width=True)
-            if sum(missing_summary.values()) == 0: st.success("No missing values found.")
-            else: st.warning(f"Total missing values: {sum(missing_summary.values())}")
+            st.markdown("#### Missing Values")
+            missing = {}
+            for col in all_selected:
+                if col in df_check.columns: missing[col] = df_check[col].isna().sum()
+            st.dataframe(pd.DataFrame(list(missing.items()), columns=['Column', 'Missing']), use_container_width=True)
+            if sum(missing.values()) == 0: st.success("No missing values.")
+            else: st.warning(f"Total missing: {sum(missing.values())}")
 
-            st.markdown("#### 2. Date Reasonability Check")
-            invalid_dates = df_check.dropna(subset=['Start_Date', 'End_Date'])
-            invalid_dates = invalid_dates[invalid_dates['End_Date'] <= invalid_dates['Start_Date']]
-            if len(invalid_dates) > 0: has_critical_errors = True; error_messages.append(f"Found {len(invalid_dates)} row(s) where End_Date is not after Start_Date."); st.error(f"{len(invalid_dates)} row(s) have End_Date <= Start_Date.")
-            else: st.success("All valid dates have End_Date after Start_Date.")
+            st.markdown("#### Date Reasonability")
+            bad_dates = df_check.dropna(subset=['Start_Date', 'End_Date'])
+            bad_dates = bad_dates[bad_dates['End_Date'] <= bad_dates['Start_Date']]
+            if len(bad_dates) > 0: has_critical = True; st.error(f"{len(bad_dates)} rows with End_Date <= Start_Date.")
+            else: st.success("All dates valid.")
 
-            st.markdown("#### 3. Duplicate Entry Check")
-            dup_rows = df_check[df_check.duplicated()]
-            if len(dup_rows) > 0: warning_messages.append(f"Found {len(dup_rows)} exact duplicate row(s)."); st.warning(f"{len(dup_rows)} exact duplicate row(s) found.")
-            else: st.success("No exact duplicate rows found.")
+            st.markdown("#### Duplicates")
+            dups = df_check[df_check.duplicated()]
+            if len(dups) > 0: st.warning(f"{len(dups)} duplicate rows found.")
+            else: st.success("No duplicates.")
 
-            st.markdown("#### Data Quality Summary")
-            if error_messages:
-                st.markdown('<div class="data-check-error"><b>Critical Issues Found:</b>', unsafe_allow_html=True)
-                for e in error_messages: st.write(f"  {e}")
-                st.markdown('</div>', unsafe_allow_html=True)
-            if warning_messages:
-                st.markdown('<div class="data-check-warning"><b>Warnings:</b>', unsafe_allow_html=True)
-                for w in warning_messages: st.write(f"  {w}")
-                st.markdown('</div>', unsafe_allow_html=True)
-            if not error_messages and not warning_messages:
-                st.markdown('<div class="data-check-success"><b>All data quality checks passed!</b></div>', unsafe_allow_html=True)
             st.markdown("---")
-            if has_critical_errors: st.error("Calculation cannot proceed due to critical data issues."); st.stop()
+            if has_critical: st.error("Cannot proceed with critical issues."); st.stop()
 
             df_processed = df_check.dropna(subset=['Start_Date', 'End_Date'])
             df_processed = df_processed[df_processed['End_Date'] > df_processed['Start_Date']]
-            for col in selected_value_cols:
-                if col in df_processed.columns: df_processed[col] = pd.to_numeric(df_processed[col], errors='coerce')
+            for col in selected_value_cols: df_processed[col] = pd.to_numeric(df_processed[col], errors='coerce')
             df_processed["Duration"] = (df_processed["End_Date"] - df_processed["Start_Date"]).dt.days
             df_processed = df_processed[df_processed["Duration"] > 0]
-            if df_processed.empty: st.error("No valid policies remaining."); st.stop()
+            if df_processed.empty: st.error("No valid policies."); st.stop()
 
-            if st.button("Calculate UPR", use_container_width=True):
-                with st.spinner("Calculating UPR..."):
+            if st.button("Calculate UPR", key="upr_calc_btn", use_container_width=True):
+                with st.spinner("Calculating..."):
                     conditions = [valuation_date < df_processed["Start_Date"], valuation_date > df_processed["End_Date"], (valuation_date <= df_processed["End_Date"]) & (valuation_date >= df_processed["Start_Date"])]
                     if method == "365th (exact days)": total = df_processed["Duration"]; remaining = (df_processed["End_Date"] - valuation_date).dt.days; choices = [1, 0, remaining / total]
-                    elif method == "24th (half-month)": interval_days = 365.25 / 24; total = df_processed["Duration"] / interval_days; remaining = (df_processed["End_Date"] - valuation_date).dt.days / interval_days; choices = [1, 0, remaining / total]
-                    else: interval_days = 365.25 / 8; total = df_processed["Duration"] / interval_days; remaining = (df_processed["End_Date"] - valuation_date).dt.days / interval_days; choices = [1, 0, remaining / total]
-                    df_processed["Unearned_portion"] = np.select(conditions, choices, default=np.nan)
-                    for col in selected_value_cols: df_processed[f"{col}_UPR"] = df_processed["Unearned_portion"] * df_processed[col]
-                    upr_columns = [f"{col}_UPR" for col in selected_value_cols]
-                    result = df_processed.groupby(grouping_cols)[upr_columns].sum().reset_index()
-                    result.columns = grouping_cols + [col.replace('_UPR', '') for col in upr_columns]
-                    st.markdown('<div class="card">', unsafe_allow_html=True)
+                    elif method == "24th (half-month)": iv = 365.25/24; total = df_processed["Duration"]/iv; remaining = (df_processed["End_Date"]-valuation_date).dt.days/iv; choices = [1, 0, remaining/total]
+                    else: iv = 365.25/8; total = df_processed["Duration"]/iv; remaining = (df_processed["End_Date"]-valuation_date).dt.days/iv; choices = [1, 0, remaining/total]
+                    df_processed["Unearned"] = np.select(conditions, choices, default=np.nan)
+                    for col in selected_value_cols: df_processed[f"{col}_UPR"] = df_processed["Unearned"] * df_processed[col]
+                    upr_cols = [f"{c}_UPR" for c in selected_value_cols]
+                    result = df_processed.groupby(grouping_cols)[upr_cols].sum().reset_index()
+                    result.columns = grouping_cols + [c.replace('_UPR', '') for c in upr_cols]
                     st.subheader("UPR Results by " + ", ".join(grouping_cols))
-                    display_result = result.copy()
-                    for col in display_result.columns:
-                        if col not in grouping_cols: display_result[col] = display_result[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else "N/A")
-                    st.dataframe(display_result, use_container_width=True); st.markdown('</div>', unsafe_allow_html=True)
+                    disp = result.copy()
+                    for c in disp.columns:
+                        if c not in grouping_cols: disp[c] = disp[c].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else "N/A")
+                    st.dataframe(disp, use_container_width=True)
                     output = BytesIO()
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer: result.to_excel(writer, index=False, sheet_name='UPR_Results')
+                    with pd.ExcelWriter(output, engine='openpyxl') as w: result.to_excel(w, index=False, sheet_name='UPR_Results')
                     output.seek(0)
-                    safe_client = re.sub(r'[\\/*?:"<>|]', "", client_name).strip() or "Client"
-                    safe_original = re.sub(r'[\\/*?:"<>|]', "", base_filename).strip() or "Data"
-                    st.download_button("Download results as Excel", data=output, file_name=f"{safe_client}_{safe_original}_UPR_Results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        except Exception as e: st.error(f"An error occurred: {e}")
+                    sc = re.sub(r'[\\/*?:"<>|]', "", client_name).strip() or "Client"
+                    so = re.sub(r'[\\/*?:"<>|]', "", base_filename).strip() or "Data"
+                    st.download_button("Download Excel", data=output, file_name=f"{sc}_{so}_UPR_Results.xlsx", key="upr_dl", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        except Exception as e: st.error(f"Error: {e}")
     st.markdown('</div>', unsafe_allow_html=True)
     back_button('lrc', ['Home', 'LRC'])
 
 
 # =============================================================================
-#  PLACEHOLDER CALCULATORS — INSERT CODE IN THE MARKED BLOCKS
+#  PLACEHOLDER CALCULATORS
 # =============================================================================
 
 def render_loss_component():
@@ -500,86 +475,62 @@ def render_ocr_calculator():
 
 def render_ibnr_percentage():
     show_breadcrumb(); st.markdown("## IBNR Percentage Method Calculator")
-    # ╔══ INSERT IBNR PERCENTAGE CODE HERE ══╗
     st.info("IBNR Percentage Method — Pending implementation")
-    # ╚══════════════════════════════════════╝
     back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
 
 def render_bcl_calculator():
     show_breadcrumb(); st.markdown("## Basic Chain Ladder (BCL) IBNR Calculator")
-    # ╔══ INSERT BCL CODE HERE ══╗
     st.info("Basic Chain Ladder — Pending implementation")
-    # ╚══════════════════════════╝
     back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
 
 def render_capecod_calculator():
     show_breadcrumb(); st.markdown("## Cape Cod IBNR Calculator")
-    # ╔══ INSERT CAPE COD CODE HERE ══╗
     st.info("Cape Cod — Pending implementation")
-    # ╚══════════════════════════════╝
     back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
 
 def render_bf_calculator():
     show_breadcrumb(); st.markdown("## Bornhuetter-Ferguson (BF) IBNR Calculator")
-    # ╔══ INSERT BF CODE HERE ══╗
     st.info("Bornhuetter-Ferguson — Pending implementation")
-    # ╚══════════════════════════╝
     back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
 
 def render_elr_calculator():
     show_breadcrumb(); st.markdown("## Expected Loss Ratio (ELR) IBNR Calculator")
-    # ╔══ INSERT ELR CODE HERE ══╗
     st.info("Expected Loss Ratio — Pending implementation")
-    # ╚══════════════════════════╝
     back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
 
 def render_acpc_calculator():
     show_breadcrumb(); st.markdown("## Average Cost Per Claim (ACPC) IBNR Calculator")
-    # ╔══ INSERT ACPC CODE HERE ══╗
     st.info("Average Cost Per Claim — Pending implementation")
-    # ╚══════════════════════════╝
     back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
 
 def render_ulae_calculator():
     show_breadcrumb(); st.markdown("## ULAE — Unallocated Loss Adjustment Expenses Calculator")
-    # ╔══ INSERT ULAE CODE HERE ══╗
     st.info("ULAE Calculator — Pending implementation")
-    # ╚══════════════════════════╝
     back_button('fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
 
 def render_npr_calculator():
     show_breadcrumb(); st.markdown("## NPR — Non-Performance Risk (Reinsurance) Calculator")
-    # ╔══ INSERT NPR CODE HERE ══╗
     st.info("NPR Calculator — Pending implementation")
-    # ╚══════════════════════════╝
     back_button('fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
 
 def render_mack_calculator():
     show_breadcrumb(); st.markdown("## Mack Method — Risk Adjustment Calculator")
-    # ╔══ INSERT MACK CODE HERE ══╗
     st.info("Mack Method — Pending implementation")
-    # ╚══════════════════════════╝
     back_button('risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
 
 def render_bootstrap_calculator():
     show_breadcrumb(); st.markdown("## Bootstrap — Stochastic Reserving Calculator")
-    # ╔══ INSERT BOOTSTRAP CODE HERE ══╗
     st.info("Bootstrap — Pending implementation")
-    # ╚══════════════════════════════╝
     back_button('risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
 
 def render_var_calculator():
     show_breadcrumb(); st.markdown("## Value at Risk (VaR) — Risk Adjustment Calculator")
-    # ╔══ INSERT VaR CODE HERE ══╗
     st.info("Value at Risk — Pending implementation")
-    # ╚══════════════════════════╝
     back_button('risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
 
 def render_coc_calculator():
     show_breadcrumb(); st.markdown("## Cost of Capital — Risk Adjustment Calculator")
-    # ╔══ INSERT COST OF CAPITAL CODE HERE ══╗
     st.info("Cost of Capital — Pending implementation")
-    # ╚══════════════════════════════════════╝
     back_button('risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
 
 

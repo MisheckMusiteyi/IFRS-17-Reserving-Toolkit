@@ -809,6 +809,305 @@ def render_bcl_calculator():
 def render_capecod_calculator():
     show_breadcrumb(); st.markdown("## Cape Cod IBNR Calculator")
     st.info("Cape Cod — Pending implementation")
+    # =============================================================================
+#  CAPE COD CALCULATOR — COMPLETE
+# =============================================================================
+
+def render_capecod_calculator():
+    """Cape Cod IBNR Calculator with Inflation & Discounting."""
+    show_breadcrumb()
+    st.markdown('<div class="hero"><h1>Cape Cod IBNR Calculator</h1><p>Internally-derived loss ratio from used-up premium. Upload claims and premium data. Optional inflation adjustment and discounting.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-container">', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1: client_name = st.text_input("Client Name", value="Client", key="cc_cn").strip()
+    with col2: pass
+
+    st.markdown('<div class="section-container"><h3>IBNR Period & Grain</h3></div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    with c1: from_date = st.date_input("From Date", value=date(2021,1,1), key="cc_fd")
+    with c2: to_date = st.date_input("To Date", value=date(2025,12,31), key="cc_td")
+    with c3: grain = st.selectbox("Grain", ["Yearly","Half-Yearly","Quarterly","Monthly"], key="cc_gr")
+    grain_map = {"Yearly":"Y","Half-Yearly":"H","Quarterly":"Q","Monthly":"M"}
+    grain_key = grain_map[grain]
+    from_date_dt = pd.to_datetime(from_date); to_date_dt = pd.to_datetime(to_date)
+    st.info(f"Period: {from_date} to {to_date} | Grain: {grain}")
+
+    # Claims file
+    st.markdown('<div class="section-container"><h3>Upload Claims Data</h3></div>', unsafe_allow_html=True)
+    claims_file = st.file_uploader("Choose claims file", type=["csv","xlsx","xls"], key="cc_cf")
+    
+    if claims_file is not None:
+        try:
+            ext = claims_file.name.split('.')[-1].lower()
+            if ext == 'csv':
+                try: df = pd.read_csv(claims_file, encoding='utf-8')
+                except: claims_file.seek(0); df = pd.read_csv(claims_file, encoding='cp1252')
+            else: df = pd.read_excel(claims_file)
+            unnamed = [c for c in df.columns if c.startswith('Unnamed:')]
+            if unnamed: df = df.drop(columns=unnamed)
+            st.markdown("#### Preview"); st.dataframe(df.head())
+            
+            st.markdown("### Map Columns")
+            all_cols = df.columns.tolist()
+            c1, c2 = st.columns(2)
+            with c1: loss_col = st.selectbox("Loss Date column", [""]+all_cols, key="cc_lc")
+            with c2: report_col = st.selectbox("Report Date column", [""]+all_cols, key="cc_rc")
+            if not loss_col or not report_col: st.warning("Select both date columns."); st.stop()
+            
+            remaining = [c for c in all_cols if c not in [loss_col, report_col]]
+            grouping_cols = st.multiselect("Grouping columns (optional)", remaining, key="cc_gc")
+            
+            num_cands = [c for c in df.columns if c not in [loss_col,report_col]+grouping_cols and pd.api.types.is_numeric_dtype(df[c])]
+            if not num_cands: st.error("No numeric columns."); st.stop()
+            amount_cols = st.multiselect("Claim Amount columns", num_cands, key="cc_ac")
+            if not amount_cols: st.warning("Select at least one amount column."); st.stop()
+
+            # Process data
+            df[loss_col] = pd.to_datetime(df[loss_col], errors='coerce')
+            df[report_col] = pd.to_datetime(df[report_col], errors='coerce')
+            df = df.dropna(subset=[loss_col, report_col])
+            df_filtered = df[(df[loss_col]>=from_date_dt)&(df[loss_col]<=to_date_dt)].copy()
+            if df_filtered.empty: st.error("No data in selected period."); st.stop()
+            st.success(f"{len(df_filtered)} records")
+
+            # Calculate periods
+            if grain_key == 'Y': n_periods = to_date_dt.year - from_date_dt.year + 1
+            elif grain_key == 'M': n_periods = (to_date_dt.year-from_date_dt.year)*12 + (to_date_dt.month-from_date_dt.month) + 1
+            elif grain_key == 'Q': n_periods = (to_date_dt.year-from_date_dt.year)*4 + ((to_date_dt.month-1)//3-(from_date_dt.month-1)//3) + 1
+            else: n_periods = (to_date_dt.year-from_date_dt.year)*2 + ((to_date_dt.month-1)//6-(from_date_dt.month-1)//6) + 1
+
+            # Get unique groups
+            if grouping_cols: unique_groups = sorted(df_filtered[grouping_cols[0]].unique())
+            else: unique_groups = ["All Data"]
+
+            # Premium file
+            st.markdown("---"); st.markdown('<div class="section-container"><h3>Upload Premium Data</h3><p>Must have one row per accident period matching the grouping columns.</p></div>', unsafe_allow_html=True)
+            st.markdown(f"**Required:** {n_periods} rows. Columns: {', '.join(unique_groups)}")
+            premium_file = st.file_uploader("Choose premium file", type=["csv","xlsx","xls"], key="cc_pf")
+            
+            premiums_dict = {}
+            if premium_file is not None:
+                prem_ext = premium_file.name.split('.')[-1].lower()
+                prem_df = pd.read_csv(premium_file) if prem_ext=='csv' else pd.read_excel(premium_file)
+                prem_df.columns = prem_df.columns.astype(str).str.strip()
+                st.markdown("#### Premium Preview"); st.dataframe(prem_df.head())
+                
+                prem_cols = prem_df.columns.tolist()
+                st.markdown("**Map premium columns to groups:**")
+                pc = st.columns(min(3, len(unique_groups)))
+                for i, g in enumerate(unique_groups):
+                    with pc[i%3]:
+                        sc = st.selectbox(f"Premium for {g}", prem_cols, key=f"cc_pm_{g}")
+                        if len(prem_df) == n_periods:
+                            premiums_dict[g] = pd.to_numeric(prem_df[sc], errors='coerce').fillna(0).tolist()
+                
+                if len(prem_df) != n_periods:
+                    st.error(f"Premium file has {len(prem_df)} rows, need {n_periods}")
+                elif all(len(v)>0 for v in premiums_dict.values()):
+                    st.success("Premium data validated.")
+
+            # Discounting & Inflation
+            st.markdown("---"); st.markdown("### Options")
+            c1, c2 = st.columns(2)
+            with c1:
+                use_discounting = st.checkbox("Apply Discounting", key="cc_ud")
+                spot_rates = None; flat_rate = None
+                if use_discounting:
+                    use_curve = st.checkbox("Use Yield Curve", key="cc_uc")
+                    if use_curve:
+                        yc_file = st.file_uploader("Yield Curve file", type=["csv","xlsx","xls"], key="cc_yc")
+                        if yc_file is not None:
+                            yc_ext = yc_file.name.split('.')[-1].lower()
+                            yc_df = pd.read_csv(yc_file) if yc_ext=='csv' else pd.read_excel(yc_file)
+                            yc_df = yc_df.dropna()
+                            if len(yc_df.columns)>=2:
+                                maturities = pd.to_numeric(yc_df.iloc[:,0], errors='coerce').values
+                                rates = pd.to_numeric(yc_df.iloc[:,1], errors='coerce').values/100
+                                ppy = periods_per_year(grain_key)
+                                pm = np.arange(1,61)/ppy
+                                if len(maturities)>=4: f_int = interpolate.CubicSpline(maturities, rates, extrapolate=True)
+                                else: f_int = interpolate.interp1d(maturities, rates, kind='linear', fill_value='extrapolate')
+                                spot_rates = np.clip(f_int(pm), 0, 1.0)
+                    else: flat_rate = st.number_input("Annual discount rate (%)", 0.0, 50.0, 5.0, key="cc_fr")/100
+            with c2:
+                use_inflation = st.checkbox("Apply Inflation Adjustment", key="cc_ui")
+                cum_inflation = None; per_period_rates = None
+                if use_inflation:
+                    inf_file = st.file_uploader("Inflation file", type=["csv","xlsx","xls"], key="cc_if")
+                    if inf_file is not None:
+                        inf_ext = inf_file.name.split('.')[-1].lower()
+                        inf_df = pd.read_csv(inf_file) if inf_ext=='csv' else pd.read_excel(inf_file)
+                        inf_df = inf_df.dropna()
+                        if len(inf_df.columns)>=2:
+                            inf_rates = pd.to_numeric(inf_df.iloc[:,1], errors='coerce').fillna(0)/100
+                            ppy_tgt = periods_per_year(grain_key)
+                            x_inf = np.arange(len(inf_rates))
+                            x_tgt = np.arange(int(x_inf[-1])+1) if len(inf_rates)>0 else np.arange(n_periods)
+                            if len(inf_rates)>=4: f_int = interpolate.CubicSpline(x_inf, inf_rates, extrapolate=True)
+                            else: f_int = interpolate.interp1d(x_inf, inf_rates, kind='linear', fill_value='extrapolate')
+                            annual_tgt = np.clip(f_int(x_tgt), -0.5, 2.0)
+                            per_period_rates = (1+annual_tgt)**(1/ppy_tgt)-1
+                            cum_inflation = np.cumprod(1+per_period_rates)
+
+            # ---- RUN CAPE COD ----
+            if st.button("Run Cape Cod Calculation", key="cc_run", use_container_width=True) and all(len(v)>0 for v in premiums_dict.values()):
+                if grouping_cols: groups = df_filtered[grouping_cols].drop_duplicates().to_dict("records")
+                else: groups = [{"__all__":"All Data"}]
+                
+                all_summary = []; all_detail = []
+                
+                for grp in groups:
+                    if "__all__" in grp: gdf = df_filtered.copy(); glabel = "All Data"
+                    else:
+                        mask = pd.Series(True, index=df_filtered.index)
+                        for col, val in grp.items(): mask &= (df_filtered[col]==val)
+                        gdf = df_filtered[mask].copy(); glabel = " | ".join(str(v) for v in grp.values())
+                    
+                    for ac in amount_cols:
+                        st.markdown(f"**{glabel} | {ac}**")
+                        
+                        # Build triangles
+                        gdf["__ap"] = gdf[loss_col].apply(lambda d: (d.year-from_date_dt.year) if grain_key=='Y' else ((d.year-from_date_dt.year)*12+(d.month-from_date_dt.month)))
+                        gdf["__dp"] = gdf.apply(lambda r: max(0, min((r[report_col].year-r[loss_col].year) if grain_key=='Y' else ((r[report_col].year-r[loss_col].year)*12+(r[report_col].month-r[loss_col].month)), n_periods-1)), axis=1)
+                        gdf = gdf[(gdf["__ap"]>=0)&(gdf["__ap"]<n_periods)]
+                        
+                        pivot = gdf.pivot_table(index="__ap", columns="__dp", values=ac, aggfunc="sum")
+                        for ap in range(n_periods):
+                            if ap not in pivot.index: pivot.loc[ap] = np.nan
+                        for dp in range(n_periods):
+                            if dp not in pivot.columns: pivot[dp] = np.nan
+                        inc = pivot.sort_index()[sorted(pivot.columns)].astype(float)
+                        for ap in inc.index:
+                            for dp in inc.columns:
+                                if ap+dp >= n_periods: inc.loc[ap, dp] = np.nan
+                        cum = inc.copy()
+                        for ap in inc.index:
+                            has_obs = any(pd.notna(inc.loc[ap, dp]) for dp in inc.columns if ap+dp<n_periods)
+                            if not has_obs: cum.loc[ap]=np.nan; continue
+                            running = 0.0
+                            for dp in sorted(inc.columns):
+                                if ap+dp<n_periods: v=inc.loc[ap,dp]; running+=v if pd.notna(v) else 0.0; cum.loc[ap,dp]=running
+                                else: cum.loc[ap,dp]=np.nan
+                        
+                        working_cum = cum.fillna(0)
+                        if use_inflation and cum_inflation is not None:
+                            valuation_idx = n_periods-1
+                            if len(cum_inflation)<=valuation_idx: cum_inflation=np.append(cum_inflation,[cum_inflation[-1]]*(valuation_idx-len(cum_inflation)+1))
+                            inf_val = cum_inflation[valuation_idx]
+                            real_inc = inc.copy().astype(float)
+                            for ap in inc.index:
+                                for dp in inc.columns:
+                                    if ap+dp>=n_periods: continue
+                                    val = inc.loc[ap, dp]
+                                    if pd.isna(val): continue
+                                    t = ap+dp; inf_t = cum_inflation[min(t, len(cum_inflation)-1)]
+                                    real_inc.loc[ap, dp] = val*(inf_val/inf_t) if inf_t>0 else val
+                            working_cum = real_inc.cumsum(axis=1).fillna(0)
+                        
+                        # Cape Cod calculation
+                        n_ay, n_dp = working_cum.shape
+                        factors = []
+                        for j in range(n_dp-1):
+                            num, den = 0.0, 0.0
+                            for i in range(n_ay):
+                                if i+j+1<n_ay:
+                                    c = working_cum.iloc[i,j]; n = working_cum.iloc[i,j+1]
+                                    if c>0: num+=n; den+=c
+                            factors.append(num/den if den>0 else 1.0)
+                        
+                        cdfs = []; running = 1.0
+                        for f in reversed(factors): running*=f; cdfs.insert(0, running)
+                        pct_developed = [1/c if c>0 else 1.0 for c in cdfs]
+                        
+                        group_key = glabel.split(" | ")[0] if " | " in glabel else glabel
+                        prems = premiums_dict.get(group_key, premiums_dict.get("All Data", [0]*n_periods))
+                        
+                        developed_claims = []; used_up_premiums = []
+                        for i in range(n_ay):
+                            last_obs = -1
+                            for j in range(n_dp-1,-1,-1):
+                                if i+j<n_ay: last_obs=j; break
+                            if last_obs==-1: developed_claims.append(0); used_up_premiums.append(0); continue
+                            current = working_cum.iloc[i,last_obs]
+                            pdv = pct_developed[last_obs] if last_obs<len(pct_developed) else 1.0
+                            developed_claims.append(current); used_up_premiums.append(prems[i]*pdv)
+                        
+                        total_dev = sum(developed_claims); total_up = sum(used_up_premiums)
+                        cc_lr = total_dev/total_up if total_up>0 else 0
+                        
+                        rows = []
+                        for i in range(n_ay):
+                            last_obs = -1
+                            for j in range(n_dp-1,-1,-1):
+                                if i+j<n_ay: last_obs=j; break
+                            if last_obs==-1: continue
+                            current = working_cum.iloc[i,last_obs]
+                            pdv = pct_developed[last_obs] if last_obs<len(pct_developed) else 1.0
+                            pu = 1-pdv
+                            eu = prems[i]*cc_lr
+                            cc_ibnr = eu*pu
+                            rows.append({"AP":i,"Current":current,"Premium":prems[i],"UsedUp":prems[i]*pdv,"PctDev":pdv*100,"Expected":eu,"CC_IBNR":cc_ibnr})
+                        
+                        res_df = pd.DataFrame(rows)
+                        res_df["CC_IBNR_Nominal"] = res_df["CC_IBNR"]
+                        
+                        if use_inflation and cum_inflation is not None and per_period_rates is not None:
+                            completed = working_cum.copy().astype(float)
+                            for i in range(n_ay):
+                                last_obs=-1
+                                for j in range(n_dp-1,-1,-1):
+                                    if i+j<n_ay: last_obs=j; break
+                                if last_obs<0: continue
+                                for j in range(last_obs,n_dp-1):
+                                    if j<len(factors):
+                                        prev=completed.iloc[i,j]; completed.iloc[i,j+1]=prev*factors[j] if prev>0 else 0.0
+                            valuation_idx=n_periods-1; last_rate=per_period_rates[-1] if len(per_period_rates)>0 else 0.0
+                            def fci(tf):
+                                f=1.0
+                                for k in range(valuation_idx+1,tf+1):
+                                    ki=k-valuation_idx-1; r=per_period_rates[ki] if ki<len(per_period_rates) else last_rate; f*=(1.0+r)
+                                return f
+                            nm={}
+                            for i in completed.index:
+                                last_obs=-1
+                                for j in range(n_dp-1,-1,-1):
+                                    if i+j<n_ay and pd.notna(working_cum.iloc[i,j]): last_obs=j; break
+                                if last_obs<0: nm[i]=0.0; continue
+                                total=0.0; dc=sorted(completed.columns)
+                                for idp,dp in enumerate(dc):
+                                    if dp<=last_obs: continue
+                                    ccv=completed.iloc[i,dp]; cpv=completed.iloc[i,dc[idp-1]] if idp>0 else 0.0
+                                    ir=max(ccv-cpv,0.0)
+                                    if ir<=0: continue
+                                    total+=ir*fci(i+dp)
+                                nm[i]=total
+                            res_df["CC_IBNR_Nominal"] = res_df["AP"].map(lambda ap: nm.get(ap,0.0))
+                        
+                        nom_total = res_df["CC_IBNR_Nominal"].sum()
+                        st.metric("Cape Cod LR", f"{cc_lr*100:.2f}%")
+                        st.metric(f"Total Cape Cod IBNR", f"{nom_total:,.2f}")
+                        disp = res_df.copy()
+                        for c in ["Current","Premium","UsedUp","Expected","CC_IBNR","CC_IBNR_Nominal"]:
+                            if c in disp.columns: disp[c] = disp[c].apply(lambda x: f"{x:,.2f}")
+                        st.dataframe(disp, use_container_width=True)
+                        
+                        all_summary.append({"Group":glabel,"Amount":ac,"Cape_Cod_LR":cc_lr,"CC_IBNR_Nominal":nom_total})
+                
+                if all_summary:
+                    st.markdown("### Overall Summary")
+                    st.dataframe(pd.DataFrame(all_summary), use_container_width=True)
+                    
+                    output = BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as w:
+                        pd.DataFrame(all_summary).to_excel(w, index=False, sheet_name='Cape_Cod_Summary')
+                    output.seek(0)
+                    sc = re.sub(r'[\\/*?:"<>|]',"",client_name).strip() or "Client"
+                    st.download_button("Download Excel", data=output, file_name=f"{sc}_CapeCod_IBNR_Results.xlsx", key="cc_dl", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        except Exception as e: st.error(f"Error: {e}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     back_button('ibnr_menu',['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
 
 def render_bf_calculator():

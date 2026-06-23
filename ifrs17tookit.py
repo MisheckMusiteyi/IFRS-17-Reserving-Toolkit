@@ -592,6 +592,124 @@ def render_ocr_calculator():
     show_breadcrumb(); st.markdown("## OCR — Outstanding Claims Reserve Calculator")
     # ╔══ INSERT OCR CODE HERE ══╗
     st.info("OCR Calculator — Pending implementation")
+    # =============================================================================
+#  OCR CALCULATOR — COMPLETE
+# =============================================================================
+
+def render_ocr_calculator():
+    """OCR — Outstanding Claims Reserve Calculator."""
+    show_breadcrumb()
+    st.markdown('<div class="hero"><h1>Outstanding Claims Reserve (OCR) Calculator</h1><p>Upload your CSV or Excel file. Select grouping columns and numeric columns. The app calculates outstanding reserves grouped by your selected columns.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-container">', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1: client_name = st.text_input("Client Name (for file name)", value="Client", key="ocr_client").strip()
+    with col2: pass
+
+    uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls"], key="ocr_file")
+
+    if uploaded_file is not None:
+        try:
+            original_filename = uploaded_file.name
+            base_filename = re.sub(r'\.[^.]*$', '', original_filename)
+            ext = uploaded_file.name.split('.')[-1].lower()
+            if ext == 'csv':
+                try: df = pd.read_csv(uploaded_file, encoding='utf-8')
+                except UnicodeDecodeError: uploaded_file.seek(0); df = pd.read_csv(uploaded_file, encoding='cp1252')
+            else: df = pd.read_excel(uploaded_file)
+
+            unnamed = [c for c in df.columns if c.startswith('Unnamed:')]
+            if unnamed: df = df.drop(columns=unnamed)
+
+            st.markdown("#### Preview of uploaded data"); st.dataframe(df.head()); st.markdown("---")
+
+            all_columns = df.columns.tolist()
+            st.markdown('<div class="grouping-container"><h3>Grouping Columns</h3><p>Select the columns you want to group by (e.g., Line_of_Business, Region). Results will be aggregated by these columns.</p></div>', unsafe_allow_html=True)
+            grouping_cols = st.multiselect("Choose columns to group by (at least one required):", options=all_columns, default=[all_columns[0]] if all_columns else [], key="ocr_group")
+            if not grouping_cols: st.error("Please select at least one grouping column."); st.stop()
+            st.markdown("---")
+
+            st.markdown("### Select Numeric Columns for OCR Calculation")
+            numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+            numeric_columns = [col for col in numeric_columns if col not in grouping_cols]
+            if not numeric_columns: st.error("No numeric columns found."); st.stop()
+            selected_value_cols = st.multiselect("Choose the numeric columns you want to sum:", options=numeric_columns, default=numeric_columns[:min(5, len(numeric_columns))] if numeric_columns else [], key="ocr_vals")
+            if not selected_value_cols: st.warning("Please select at least one numeric column."); st.stop()
+
+            # Data Quality Checks
+            st.markdown("### Data Quality Checks")
+            all_selected = grouping_cols + selected_value_cols
+            df_original_len = len(df)
+
+            st.markdown("#### 1. Missing Values Check")
+            missing_summary = {}
+            missing_found = False
+            for col in all_selected:
+                if col in df.columns:
+                    mc = df[col].isna().sum(); missing_summary[col] = mc
+                    if mc > 0: missing_found = True
+            st.dataframe(pd.DataFrame(list(missing_summary.items()), columns=['Column', 'Missing']), use_container_width=True)
+            if missing_found:
+                st.markdown('<div class="data-check-error"><b>CRITICAL: Missing values found.</b> Please fix and re-upload.</div>', unsafe_allow_html=True)
+                with st.expander("View rows with missing values"):
+                    st.dataframe(df[df[all_selected].isna().any(axis=1)].head(20))
+                st.stop()
+            else: st.success("No missing values found.")
+
+            st.markdown("#### 2. Duplicate Rows Check")
+            dup_count = df.duplicated().sum()
+            if dup_count > 0: df = df.drop_duplicates(); st.success(f"Removed {dup_count} duplicate row(s). {len(df)} rows remaining.")
+            else: st.success("No duplicate rows found.")
+
+            st.markdown("#### 3. Non-Numeric Values Check")
+            def clean_numeric(series):
+                if series.dtype == 'object':
+                    c = series.astype(str).str.replace(r'[$,]', '', regex=True)
+                    c = c.str.replace(r',', '', regex=False)
+                    c = c.str.replace(r'^\((.+)\)$', r'-\1', regex=True).str.strip().replace('', np.nan)
+                    return pd.to_numeric(c, errors='coerce')
+                return pd.to_numeric(series, errors='coerce')
+
+            conversion_issues = []
+            for col in selected_value_cols:
+                if col in df.columns:
+                    test = clean_numeric(df[col])
+                    failed = test.isna() & df[col].notna()
+                    if failed.sum() > 0: conversion_issues.append(f"Column '{col}': {failed.sum()} non-numeric values")
+            if conversion_issues:
+                for issue in conversion_issues: st.write(f"  {issue}")
+                for col in selected_value_cols: df[col] = clean_numeric(df[col]).fillna(0)
+                st.success("Non-numeric values converted.")
+            else: st.success("All numeric columns valid.")
+
+            st.markdown("#### Data Quality Summary")
+            if dup_count > 0 or conversion_issues: st.info("Adjustments applied (see above).")
+            else: st.markdown('<div class="data-check-success"><b>All checks passed!</b></div>', unsafe_allow_html=True)
+            st.markdown("---")
+
+            df_processed = df[grouping_cols + selected_value_cols].copy()
+            for col in selected_value_cols: df_processed[col] = pd.to_numeric(df_processed[col], errors='coerce').fillna(0)
+            grouped = df_processed.groupby(grouping_cols)[selected_value_cols].sum().reset_index()
+
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.subheader("Outstanding Reserve Results")
+            st.markdown(f"**Grouped by:** {', '.join(grouping_cols)}")
+            disp = grouped.copy()
+            for col in selected_value_cols: disp[col] = disp[col].apply(lambda x: f"{x:,.2f}")
+            st.dataframe(disp, use_container_width=True)
+            st.caption(f"Original rows: {df_original_len} | After cleaning: {len(df_processed)} | Grouped results: {len(grouped)}")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as w: grouped.to_excel(w, index=False, sheet_name='OCR_Results')
+            output.seek(0)
+            sc = re.sub(r'[\\/*?:"<>|]', "", client_name).strip() or "Client"
+            so = re.sub(r'[\\/*?:"<>|]', "", base_filename).strip() or "Data"
+            st.download_button("Download Excel Report", data=output, file_name=f"{sc}_{so}_OCR_Results.xlsx", key="ocr_dl", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        except Exception as e: st.error(f"Error: {e}")
+
+    st.markdown('</div>', unsafe_allow_html=True)
     # ╚═══════════════════════════╝
     back_button('fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
 

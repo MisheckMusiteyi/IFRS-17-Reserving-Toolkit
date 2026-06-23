@@ -1,0 +1,13 @@
+streamlit
+gspread
+oauth2client
+pandas
+streamlit>=1.28.0
+pandas>=1.5.0
+numpy>=1.23.0
+openpyxl>=3.0.0
+scipy>=1.10.0streamlit>=1.28.0
+pandas>=1.5.0
+numpy>=1.23.0
+openpyxl>=3.0.0
+scipy>=1.10.0

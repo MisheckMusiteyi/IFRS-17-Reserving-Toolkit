@@ -463,6 +463,128 @@ def render_loss_component():
     show_breadcrumb(); st.markdown("## Loss Component Calculator")
     # ╔══ INSERT LOSS COMPONENT CODE HERE ══╗
     st.info("Loss Component Calculator — Pending implementation")
+    # =============================================================================
+#  LOSS COMPONENT CALCULATOR — COMPLETE
+# =============================================================================
+
+def render_loss_component():
+    """Loss Component Calculator."""
+    show_breadcrumb()
+    st.markdown('<div class="hero"><h1>Loss Component Calculator</h1><p>Upload your CSV or Excel file. Map your columns to the required fields below. The app calculates Loss Ratio, Commission Ratio, Expense Ratio, Risk Adjustment Ratio, Combined Ratio, and the Loss Component.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-container">', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1: client_name = st.text_input("Client Name (for file name)", value="Client", key="lc_client").strip()
+    with col2: pass
+
+    uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls"], key="lc_file")
+
+    if uploaded_file is not None:
+        try:
+            ext = uploaded_file.name.split('.')[-1].lower()
+            if ext == 'csv':
+                try: df = pd.read_csv(uploaded_file, encoding='utf-8')
+                except UnicodeDecodeError: uploaded_file.seek(0); df = pd.read_csv(uploaded_file, encoding='cp1252')
+            else: df = pd.read_excel(uploaded_file)
+
+            unnamed = [c for c in df.columns if c.startswith('Unnamed:')]
+            if unnamed: df = df.drop(columns=unnamed)
+
+            st.markdown("#### Preview of uploaded data"); st.dataframe(df.head()); st.markdown("---")
+            st.markdown("### Map Your Columns to Required Fields")
+
+            all_columns = df.columns.tolist()
+            required_fields = {
+                'Line_of_business': 'Line of Business - The category/segment for grouping results',
+                'Gross_Written_Premiums': 'Gross Written Premiums - Total premiums written',
+                'Gross_Attributable_Expenses': 'Gross Attributable Expenses - Operating expenses',
+                'Gross_Commission_Paid': 'Gross Commission Paid - Commission expenses',
+                'Gross_Paid_Claims': 'Gross Paid Claims - Claims paid during the period',
+                'Gross_Opening_OCR': 'Gross Opening OCR - Opening outstanding claims reserve',
+                'Gross_Closing_OCR': 'Gross Closing OCR - Closing outstanding claims reserve',
+                'Gross_Opening_IBNR': 'Gross Opening IBNR - Opening incurred but not reported reserve',
+                'Gross_Closing_IBNR': 'Gross Closing IBNR - Closing incurred but not reported reserve',
+                'Gross_Opening_UPR': 'Gross Opening UPR - Opening unearned premium reserve',
+                'Gross_Closing_UPR': 'Gross Closing UPR - Closing unearned premium reserve',
+                'Gross_Risk_Adjustment': 'Gross Risk Adjustment - Risk adjustment amount'
+            }
+
+            mapped_columns = {}
+            field_list = list(required_fields.keys())
+            for i in range(0, len(field_list), 3):
+                cols = st.columns(3)
+                for j in range(3):
+                    if i + j < len(field_list):
+                        field = field_list[i + j]
+                        with cols[j]:
+                            description = required_fields[field]
+                            _, field_desc = description.split(' - ', 1)
+                            st.markdown(f'<div class="required-container"><h3>{field}</h3><p>{field_desc}</p></div>', unsafe_allow_html=True)
+                            mapped_columns[field] = st.selectbox(f"Select {field}", options=[""] + all_columns, key=f"lc_map_{field}", label_visibility="collapsed")
+                            if mapped_columns[field] == "": mapped_columns[field] = None
+
+            st.markdown("---")
+            missing = [f for f, c in mapped_columns.items() if c is None]
+            if missing: st.error(f"Please map all required columns. Missing: {', '.join(missing)}"); st.stop()
+
+            df_processed = df.rename(columns=mapped_columns)
+
+            # Calculate derived fields
+            df_processed["Gross_Actual_Incurred_Claims"] = (
+                df_processed["Gross_Paid_Claims"] + df_processed["Gross_Closing_IBNR"] +
+                df_processed["Gross_Closing_OCR"] - df_processed["Gross_Opening_IBNR"] -
+                df_processed["Gross_Opening_OCR"]
+            )
+            df_processed["Gross_Earned_Premiums"] = (
+                df_processed["Gross_Written_Premiums"] + df_processed["Gross_Opening_UPR"] -
+                df_processed["Gross_Closing_UPR"]
+            )
+
+            # Aggregate by Line of Business
+            result = df_processed.groupby('Line_of_business').agg({
+                'Gross_Written_Premiums': 'sum', 'Gross_Earned_Premiums': 'sum',
+                'Gross_Actual_Incurred_Claims': 'sum', 'Gross_Commission_Paid': 'sum',
+                'Gross_Attributable_Expenses': 'sum', 'Gross_Risk_Adjustment': 'sum',
+                'Gross_Closing_IBNR': 'sum', 'Gross_Closing_OCR': 'sum', 'Gross_Closing_UPR': 'sum'
+            }).reset_index()
+
+            # Calculate ratios from totals
+            result['Loss_Ratio'] = np.where(result['Gross_Earned_Premiums'] != 0, result['Gross_Actual_Incurred_Claims'] / result['Gross_Earned_Premiums'], np.nan)
+            result['Commission_Ratio'] = np.where(result['Gross_Written_Premiums'] != 0, result['Gross_Commission_Paid'] / result['Gross_Written_Premiums'], np.nan)
+            result['Expense_Ratio'] = np.where(result['Gross_Written_Premiums'] != 0, result['Gross_Attributable_Expenses'] / result['Gross_Written_Premiums'], np.nan)
+            ra_denom = result['Gross_Closing_IBNR'] + result['Gross_Closing_OCR']
+            result['Risk_Adjustment_Ratio'] = np.where(ra_denom != 0, result['Gross_Risk_Adjustment'] / ra_denom, np.nan)
+            result['Combined_Ratio'] = result['Loss_Ratio'] + result['Commission_Ratio'] + result['Expense_Ratio'] + result['Risk_Adjustment_Ratio']
+            result['Loss_Component'] = np.maximum(result['Combined_Ratio'] - 1, 0) * result['Gross_Closing_UPR']
+
+            result = result.rename(columns={
+                'Gross_Written_Premiums': 'Total_Written_Premiums', 'Gross_Earned_Premiums': 'Total_Earned_Premiums',
+                'Gross_Actual_Incurred_Claims': 'Total_Incurred_Claims', 'Gross_Commission_Paid': 'Total_Commission_Paid',
+                'Gross_Attributable_Expenses': 'Total_Expenses', 'Gross_Risk_Adjustment': 'Total_Risk_Adjustment',
+                'Gross_Closing_UPR': 'Closing_UPR'
+            })
+
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.subheader("Loss Component Results by Line of Business")
+            disp = result.copy()
+            for c in disp.columns:
+                if c != 'Line_of_business':
+                    disp[c] = disp[c].apply(lambda x: f"{x:.2%}" if 'Ratio' in c and pd.notna(x) else (f"{x:,.2f}" if pd.notna(x) else "N/A"))
+            st.dataframe(disp, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as w: result.to_excel(w, index=False, sheet_name='Loss_Component_Results')
+            output.seek(0)
+            sc = "".join(c for c in client_name if c.isalnum() or c in (' ', '-', '_')).rstrip() or "Client"
+            st.download_button("Download Excel", data=output, file_name=f"{sc}_Loss_Component_Results.xlsx", key="lc_dl", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+            with st.expander("View Detailed Calculations"):
+                st.dataframe(df_processed, use_container_width=True)
+
+        except Exception as e: st.error(f"Error: {e}")
+
+    st.markdown('</div>', unsafe_allow_html=True)
     # ╚══════════════════════════════════════╝
     back_button('lrc', ['Home', 'LRC'])
 

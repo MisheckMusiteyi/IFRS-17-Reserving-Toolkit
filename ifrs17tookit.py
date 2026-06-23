@@ -1409,6 +1409,173 @@ def render_bf_calculator():
 def render_elr_calculator():
     show_breadcrumb(); st.markdown("## Expected Loss Ratio (ELR) IBNR Calculator")
     st.info("Expected Loss Ratio — Pending implementation")
+    # =============================================================================
+#  ULAE CALCULATOR — COMPLETE
+# =============================================================================
+
+def render_ulae_calculator():
+    """ULAE — Unallocated Loss Adjustment Expenses Calculator."""
+    show_breadcrumb()
+    st.markdown('<div class="hero"><h1>ULAE — Unallocated Loss Adjustment Expenses Calculator</h1><p>Formula: ULAE = ULAE_Ratio x (50% x OCR + IBNR). Supports per-portfolio and aggregated calculation with apportionment.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-container">', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1: client_name = st.text_input("Client Name", value="Client", key="ulae_cn").strip()
+    with col2: pass
+
+    # ---- RESERVES DATA ----
+    st.markdown('<div class="section-container"><h3>Step 1: Load Reserves Data</h3></div>', unsafe_allow_html=True)
+    data_format = st.radio("Reserves data format:", ["Detailed (separate OCR and IBNR)", "Summary (single Total Reserves)"], key="ulae_df")
+    is_detailed = data_format.startswith("Detailed")
+    
+    reserves_file = st.file_uploader("Upload Reserves file (CSV/Excel)", type=["csv","xlsx","xls"], key="ulae_rf")
+    
+    if reserves_file is not None:
+        try:
+            ext = reserves_file.name.split('.')[-1].lower()
+            if ext == 'csv':
+                try: df_res = pd.read_csv(reserves_file, encoding='utf-8')
+                except: reserves_file.seek(0); df_res = pd.read_csv(reserves_file, encoding='cp1252')
+            else: df_res = pd.read_excel(reserves_file)
+            unnamed = [c for c in df_res.columns if c.startswith('Unnamed:')]
+            if unnamed: df_res = df_res.drop(columns=unnamed)
+            
+            st.markdown("#### Preview"); st.dataframe(df_res.head())
+            all_cols = df_res.columns.tolist()
+            
+            st.markdown("### Map Columns")
+            portfolio_col = st.selectbox("Portfolio column", [""]+all_cols, key="ulae_pc")
+            if not portfolio_col: st.warning("Select portfolio column."); st.stop()
+            
+            df_res = df_res.rename(columns={portfolio_col: "Portfolio"})
+            
+            if is_detailed:
+                c1, c2 = st.columns(2)
+                with c1: ocr_col = st.selectbox("OCR column", [""]+[c for c in all_cols if c!=portfolio_col], key="ulae_oc")
+                with c2: ibnr_col = st.selectbox("IBNR column", [""]+[c for c in all_cols if c!=portfolio_col], key="ulae_ic")
+                if not ocr_col or not ibnr_col: st.warning("Select both OCR and IBNR columns."); st.stop()
+                df_res = df_res.rename(columns={ocr_col:"OCR", ibnr_col:"IBNR"})
+                df_res["OCR"] = pd.to_numeric(df_res["OCR"], errors='coerce').fillna(0)
+                df_res["IBNR"] = pd.to_numeric(df_res["IBNR"], errors='coerce').fillna(0)
+                df_res["Total_Reserves"] = df_res["OCR"] + df_res["IBNR"]
+            else:
+                total_col = st.selectbox("Total Reserves column", [""]+[c for c in all_cols if c!=portfolio_col], key="ulae_tc")
+                if not total_col: st.warning("Select Total Reserves column."); st.stop()
+                df_res = df_res.rename(columns={total_col:"Total_Reserves"})
+                df_res["Total_Reserves"] = pd.to_numeric(df_res["Total_Reserves"], errors='coerce').fillna(0)
+                df_res["OCR"] = np.nan; df_res["IBNR"] = np.nan
+            
+            portfolios = df_res["Portfolio"].dropna().unique().tolist()
+            st.success(f"Loaded {len(portfolios)} portfolios: {', '.join(portfolios)}")
+            
+            # Display reserves summary
+            st.markdown("**Reserves Summary:**")
+            for _, row in df_res.iterrows():
+                ocr_s = f"{row['OCR']:,.2f}" if pd.notna(row['OCR']) else "N/A"
+                ibnr_s = f"{row['IBNR']:,.2f}" if pd.notna(row['IBNR']) else "N/A"
+                st.write(f"  {row['Portfolio']:<20} OCR: {ocr_s:>15}  IBNR: {ibnr_s:>15}  Total: {row['Total_Reserves']:>15,.2f}")
+
+            # ---- CALCULATION BASIS ----
+            st.markdown("---"); st.markdown('<div class="section-container"><h3>Step 2: Calculation Basis</h3></div>', unsafe_allow_html=True)
+            basis = st.radio("How to calculate ULAE?", ["Per Portfolio (separate calculation)", "Aggregated (single calculation, then apportion)"], key="ulae_bs")
+            is_aggregated = basis.startswith("Aggregated")
+            
+            apportionment_df = None
+            if is_aggregated:
+                st.markdown("**Apportionment Data** (Portfolio + Amount):")
+                app_file = st.file_uploader("Upload Apportionment file (CSV/Excel)", type=["csv","xlsx","xls"], key="ulae_af")
+                if app_file is not None:
+                    app_ext = app_file.name.split('.')[-1].lower()
+                    app_df = pd.read_csv(app_file) if app_ext=='csv' else pd.read_excel(app_file)
+                    app_cols = app_df.columns.tolist()
+                    c1, c2 = st.columns(2)
+                    with c1: app_port_col = st.selectbox("Portfolio column", [""]+app_cols, key="ulae_apc")
+                    with c2: app_amt_col = st.selectbox("Amount column", [""]+app_cols, key="ulae_aac")
+                    if app_port_col and app_amt_col:
+                        app_df = app_df.rename(columns={app_port_col:"Portfolio", app_amt_col:"Amount"})
+                        app_df["Amount"] = pd.to_numeric(app_df["Amount"], errors='coerce').fillna(0)
+                        total_amt = app_df["Amount"].sum()
+                        app_df["Apportionment_Pct"] = app_df["Amount"]/total_amt if total_amt>0 else 0
+                        apportionment_df = app_df
+                        st.success("Apportionment data loaded.")
+                        st.dataframe(app_df[["Portfolio","Amount","Apportionment_Pct"]], use_container_width=True)
+
+            # ---- ULAE RATIO ----
+            st.markdown("---"); st.markdown('<div class="section-container"><h3>Step 3: ULAE Ratio</h3></div>', unsafe_allow_html=True)
+            ratio_method = st.radio("ULAE Ratio method:", ["Overall (single ratio)", "Per Portfolio (manual entry)", "Per Portfolio (from file)"], key="ulae_rm")
+            
+            ulae_ratios = {}
+            if ratio_method.startswith("Overall"):
+                overall_pct = st.number_input("ULAE Ratio (%)", 0.0, 100.0, 5.0, 0.5, key="ulae_op")/100
+                ulae_ratios = {p: overall_pct for p in portfolios}
+                st.caption(f"Overall ULAE Ratio: {overall_pct*100:.2f}%")
+            elif ratio_method.startswith("Per Portfolio") and "manual" in ratio_method:
+                st.markdown("Enter ULAE ratio for each portfolio:")
+                ec = st.columns(min(3, len(portfolios)))
+                for i, p in enumerate(portfolios):
+                    with ec[i%3]: ulae_ratios[p] = st.number_input(f"{p} (%)", 0.0, 100.0, 5.0, 0.5, key=f"ulae_r_{p}")/100
+            else:
+                ratio_file = st.file_uploader("Upload ULAE Ratio file (Portfolio + Ratio%)", type=["csv","xlsx","xls"], key="ulae_rf2")
+                if ratio_file is not None:
+                    rext = ratio_file.name.split('.')[-1].lower()
+                    rdf = pd.read_csv(ratio_file) if rext=='csv' else pd.read_excel(ratio_file)
+                    rcols = rdf.columns.tolist()
+                    c1, c2 = st.columns(2)
+                    with c1: rpc = st.selectbox("Portfolio column", [""]+rcols, key="ulae_rpc")
+                    with c2: rrc = st.selectbox("Ratio column", [""]+rcols, key="ulae_rrc")
+                    if rpc and rrc:
+                        rdf = rdf.rename(columns={rpc:"Portfolio", rrc:"ULAE_Ratio"})
+                        rdf["ULAE_Ratio"] = pd.to_numeric(rdf["ULAE_Ratio"], errors='coerce')/100
+                        ulae_ratios = dict(zip(rdf["Portfolio"], rdf["ULAE_Ratio"]))
+                        for p in portfolios:
+                            if p not in ulae_ratios: ulae_ratios[p] = 0.0
+                        st.success("Ratios loaded.")
+
+            # ---- CALCULATE ----
+            if st.button("Calculate ULAE", key="ulae_run", use_container_width=True) and ulae_ratios:
+                results = df_res.copy()
+                results["ULAE_Ratio"] = results["Portfolio"].map(ulae_ratios).fillna(0)
+                
+                if is_detailed:
+                    results["ULAE_Base"] = 0.5*results["OCR"] + results["IBNR"]
+                else:
+                    results["ULAE_Base"] = results["Total_Reserves"]
+                
+                if is_aggregated and apportionment_df is not None:
+                    overall_ratio = list(ulae_ratios.values())[0]
+                    total_base = results["ULAE_Base"].sum()
+                    total_ulae = total_base * overall_ratio
+                    results["ULAE_Ratio"] = overall_ratio
+                    results = results.merge(apportionment_df[["Portfolio","Apportionment_Pct"]], on="Portfolio", how="left")
+                    results["Apportionment_Pct"] = results["Apportionment_Pct"].fillna(0)
+                    results["ULAE"] = total_ulae * results["Apportionment_Pct"]
+                    st.info(f"Aggregated ULAE Base: {total_base:,.2f} | Total ULAE: {total_ulae:,.2f}")
+                else:
+                    results["ULAE"] = results["ULAE_Ratio"] * results["ULAE_Base"]
+                
+                st.markdown("### ULAE Results")
+                disp_cols = ["Portfolio","OCR","IBNR","Total_Reserves","ULAE_Ratio","ULAE_Base","ULAE"]
+                if is_aggregated: disp_cols.append("Apportionment_Pct")
+                disp = results[disp_cols].copy()
+                for c in disp.columns:
+                    if c == "Portfolio": continue
+                    if "Ratio" in c or "Pct" in c: disp[c] = disp[c].apply(lambda x: f"{x:.2%}" if pd.notna(x) else "N/A")
+                    else: disp[c] = disp[c].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else "N/A")
+                st.dataframe(disp, use_container_width=True)
+                
+                total_ulae_val = results["ULAE"].sum()
+                st.metric("Total ULAE", f"{total_ulae_val:,.2f}")
+                
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as w:
+                    results[disp_cols].to_excel(w, index=False, sheet_name='ULAE_Results')
+                output.seek(0)
+                sc = re.sub(r'[\\/*?:"<>|]',"",client_name).strip() or "Client"
+                st.download_button("Download Excel", data=output, file_name=f"{sc}_ULAE_Results.xlsx", key="ulae_dl", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        except Exception as e: st.error(f"Error: {e}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     back_button('ibnr_menu',['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
 
 def render_acpc_calculator():

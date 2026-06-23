@@ -136,6 +136,21 @@ st.markdown("""
         border: 1px solid #4A90D9 !important;
         border-radius: 4px !important;
     }
+    /* UPR-specific styles */
+    .required-container {
+        background-color: #F9F9F9; border: 2px solid #4A90D9;
+        border-radius: 10px; padding: 1rem; text-align: center;
+        min-height: 120px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+    }
+    .required-container h3 { color: #4A90D9; font-size: 1.2rem; font-weight: bold; }
+    .required-container p { color: #666666; font-size: 0.85rem; }
+    .grouping-container {
+        background-color: #F9F9F9; border: 2px solid #4A90D9;
+        border-radius: 10px; padding: 1rem; margin-bottom: 1rem;
+    }
+    .grouping-container h3 { color: #4A90D9; font-size: 1.2rem; font-weight: bold; }
+    .main-container { max-width: 1400px; margin: 2rem auto; padding: 0 2rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -191,7 +206,6 @@ def show_breadcrumb():
 # =============================================================================
 
 def back_button(target_page, target_breadcrumb):
-    """Standardized back button with unique key to prevent duplicates."""
     st.markdown("<br>", unsafe_allow_html=True)
     unique_id = str(uuid.uuid4())[:8]
     if st.button("Back", key=f"back_{target_page}_{unique_id}"):
@@ -199,7 +213,7 @@ def back_button(target_page, target_breadcrumb):
         st.rerun()
 
 # =============================================================================
-#  PAGE RENDERERS
+#  PAGE RENDERERS — NAVIGATION MENUS
 # =============================================================================
 
 def render_home():
@@ -210,34 +224,17 @@ def render_home():
         <p style="margin-top: 1rem; font-size: 1rem;">Liability for Remaining Coverage (LRC) | Liability for Incurred Claims (LIC)</p>
     </div>
     """, unsafe_allow_html=True)
-
     st.markdown("<br>", unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
-
     with col1:
-        st.markdown("""
-        <div class="card">
-            <h3>LRC — Liability for Remaining Coverage</h3>
-            <p>Unexpired risk reserve calculations for premium liabilities.</p>
-            <p style="font-size:0.85rem;color:#666;">UPR Calculator | Loss Component</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div class="card"><h3>LRC — Liability for Remaining Coverage</h3><p>Unexpired risk reserve calculations for premium liabilities.</p><p style="font-size:0.85rem;color:#666;">UPR Calculator | Loss Component</p></div>', unsafe_allow_html=True)
         if st.button("Go to LRC Calculators", key="btn_lrc"):
-            navigate_to('lrc', ['Home', 'LRC'])
-            st.rerun()
-
+            navigate_to('lrc', ['Home', 'LRC']); st.rerun()
     with col2:
-        st.markdown("""
-        <div class="card">
-            <h3>LIC — Liability for Incurred Claims</h3>
-            <p>Outstanding claims reserves, IBNR, ULAE, Risk Adjustment, and more.</p>
-            <p style="font-size:0.85rem;color:#666;">Fulfilment Cashflows | Risk Adjustment</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div class="card"><h3>LIC — Liability for Incurred Claims</h3><p>Outstanding claims reserves, IBNR, ULAE, Risk Adjustment, and more.</p><p style="font-size:0.85rem;color:#666;">Fulfilment Cashflows | Risk Adjustment</p></div>', unsafe_allow_html=True)
         if st.button("Go to LIC Calculators", key="btn_lic"):
-            navigate_to('lic', ['Home', 'LIC'])
-            st.rerun()
+            navigate_to('lic', ['Home', 'LIC']); st.rerun()
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.info("Select LRC or LIC above to access the relevant actuarial calculators.")
@@ -245,49 +242,31 @@ def render_home():
 
 def render_lrc():
     show_breadcrumb()
-    st.markdown("""
-    <div class="hero" style="padding: 2rem;">
-        <h1>LRC — Liability for Remaining Coverage</h1>
-        <p>Unexpired risk reserve and loss component calculations</p>
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.markdown('<div class="hero" style="padding: 2rem;"><h1>LRC — Liability for Remaining Coverage</h1><p>Unexpired risk reserve and loss component calculations</p></div>', unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="card"><h3>UPR Calculator</h3><p>Unearned Premium Reserve — 365th, 24th, and 8th methods with data quality checks.</p></div>', unsafe_allow_html=True)
         if st.button("Open UPR Calculator", key="btn_upr"):
-            navigate_to('upr_calculator', ['Home', 'LRC', 'UPR Calculator'])
-            st.rerun()
+            navigate_to('upr_calculator', ['Home', 'LRC', 'UPR Calculator']); st.rerun()
     with col2:
         st.markdown('<div class="card"><h3>Loss Component</h3><p>Calculate Loss Ratio, Commission Ratio, Expense Ratio, Combined Ratio, and Loss Component.</p></div>', unsafe_allow_html=True)
         if st.button("Open Loss Component", key="btn_loss_comp"):
-            navigate_to('loss_component', ['Home', 'LRC', 'Loss Component'])
-            st.rerun()
-
+            navigate_to('loss_component', ['Home', 'LRC', 'Loss Component']); st.rerun()
     back_button('home', ['Home'])
 
 
 def render_lic():
     show_breadcrumb()
-    st.markdown("""
-    <div class="hero" style="padding: 2rem;">
-        <h1>LIC — Liability for Incurred Claims</h1>
-        <p>Outstanding claims, IBNR, ULAE, NPR, and Risk Adjustment</p>
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.markdown('<div class="hero" style="padding: 2rem;"><h1>LIC — Liability for Incurred Claims</h1><p>Outstanding claims, IBNR, ULAE, NPR, and Risk Adjustment</p></div>', unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="card"><h3>Fulfilment Cashflows</h3><p>OCR, IBNR (6 methods), ULAE, and NPR calculators.</p></div>', unsafe_allow_html=True)
         if st.button("Fulfilment Cashflows", key="btn_fulfilment"):
-            navigate_to('fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
-            st.rerun()
+            navigate_to('fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows']); st.rerun()
     with col2:
         st.markdown('<div class="card"><h3>Risk Adjustment</h3><p>Mack, Bootstrap, VaR, and Cost of Capital methods.</p></div>', unsafe_allow_html=True)
         if st.button("Risk Adjustment", key="btn_ra"):
-            navigate_to('risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
-            st.rerun()
-
+            navigate_to('risk_adjustment', ['Home', 'LIC', 'Risk Adjustment']); st.rerun()
     back_button('home', ['Home'])
 
 
@@ -296,21 +275,18 @@ def render_fulfilment_cashflows():
     st.markdown("## Fulfilment Cashflows")
     st.markdown("Select a calculator from the options below:")
     st.markdown("<br>", unsafe_allow_html=True)
-
     cols = st.columns(4)
     calculators = [
         ("OCR", "Outstanding Claims Reserve", "ocr_calculator", "OCR Calculator"),
-        ("IBNR", "Incurred But Not Reported — 6 Methods", "ibnr_menu", "IBNR Methods"),
+        ("IBNR", "Incurred But Not Reported", "ibnr_menu", "IBNR Methods"),
         ("ULAE", "Unallocated Loss Adjustment Expenses", "ulae_calculator", "ULAE Calculator"),
-        ("NPR", "Non-Performance Risk (Reinsurance)", "npr_calculator", "NPR Calculator"),
+        ("NPR", "Non-Performance Risk", "npr_calculator", "NPR Calculator"),
     ]
     for i, (title, desc, page, breadcrumb) in enumerate(calculators):
         with cols[i]:
             st.markdown(f'<div class="card"><h3>{title}</h3><p>{desc}</p></div>', unsafe_allow_html=True)
             if st.button("Open", key=f"btn_{page}"):
-                navigate_to(page, ['Home', 'LIC', 'Fulfilment Cashflows', breadcrumb])
-                st.rerun()
-
+                navigate_to(page, ['Home', 'LIC', 'Fulfilment Cashflows', breadcrumb]); st.rerun()
     back_button('lic', ['Home', 'LIC'])
 
 
@@ -319,11 +295,10 @@ def render_ibnr_menu():
     st.markdown("## IBNR Calculation Methods")
     st.markdown("Select an IBNR estimation method:")
     st.markdown("<br>", unsafe_allow_html=True)
-
     methods = [
         ("Percentage Approach", "Simple percentage of premiums", "ibnr_percentage"),
         ("Basic Chain Ladder (BCL)", "Traditional CL with inflation & discounting", "bcl_calculator"),
-        ("Cape Cod", "Internally-derived loss ratio from used-up premium", "capecod_calculator"),
+        ("Cape Cod", "Internally-derived loss ratio", "capecod_calculator"),
         ("Bornhuetter-Ferguson (BF)", "A-priori ELR with development pattern", "bf_calculator"),
         ("Expected Loss Ratio (ELR)", "Pure ELR method for IBNR", "elr_calculator"),
         ("Average Cost Per Claim (ACPC)", "Claims frequency & severity approach", "acpc_calculator"),
@@ -337,9 +312,7 @@ def render_ibnr_menu():
                 with cols[j]:
                     st.markdown(f'<div class="card"><h3>{name}</h3><p>{desc}</p></div>', unsafe_allow_html=True)
                     if st.button("Open", key=f"btn_{page}"):
-                        navigate_to(page, ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods', name.split(' ')[0]])
-                        st.rerun()
-
+                        navigate_to(page, ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods', name]); st.rerun()
     back_button('fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
 
 
@@ -348,7 +321,6 @@ def render_risk_adjustment():
     st.markdown("## Risk Adjustment Methods")
     st.markdown("Select a risk adjustment methodology:")
     st.markdown("<br>", unsafe_allow_html=True)
-
     methods = [
         ("Mack Method", "Distribution-free standard error of Chain Ladder", "mack_calculator"),
         ("Bootstrap", "England & Verrall (2002) stochastic reserving", "bootstrap_calculator"),
@@ -360,38 +332,26 @@ def render_risk_adjustment():
         with cols[i]:
             st.markdown(f'<div class="card"><h3>{name}</h3><p>{desc}</p></div>', unsafe_allow_html=True)
             if st.button("Open", key=f"btn_{page}"):
-                navigate_to(page, ['Home', 'LIC', 'Risk Adjustment', name.split(' ')[0]])
-                st.rerun()
-
+                navigate_to(page, ['Home', 'LIC', 'Risk Adjustment', name]); st.rerun()
     back_button('lic', ['Home', 'LIC'])
 
 
 # =============================================================================
-#  CALCULATOR IMPLEMENTATIONS
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║                    CALCULATOR IMPLEMENTATIONS                            ║
+#  ║  COMPLETED: UPR Calculator                                              ║
+#  ║  TODO: All other calculators — replace placeholder with full code        ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+
+# =============================================================================
+#  UPR CALCULATOR — COMPLETE
 # =============================================================================
 
 def render_upr_calculator():
-    """UPR Calculator — Unearned Premium Reserve."""
+    """UPR Calculator — Unearned Premium Reserve. FULLY IMPLEMENTED."""
     show_breadcrumb()
-
-    st.markdown("""
-    <style>
-        .required-container {
-            background-color: #F9F9F9; border: 2px solid #4A90D9;
-            border-radius: 10px; padding: 1rem; text-align: center;
-            min-height: 120px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 1rem;
-        }
-        .required-container h3 { color: #4A90D9; font-size: 1.2rem; font-weight: bold; }
-        .required-container p { color: #666666; font-size: 0.85rem; }
-        .grouping-container {
-            background-color: #F9F9F9; border: 2px solid #4A90D9;
-            border-radius: 10px; padding: 1rem; margin-bottom: 1rem;
-        }
-        .grouping-container h3 { color: #4A90D9; font-size: 1.2rem; font-weight: bold; }
-        .main-container { max-width: 1400px; margin: 2rem auto; padding: 0 2rem; }
-    </style>
-    """, unsafe_allow_html=True)
 
     st.markdown("""
     <div class="hero">
@@ -422,11 +382,9 @@ def render_upr_calculator():
 
             file_extension = uploaded_file.name.split('.')[-1].lower()
             if file_extension == 'csv':
-                try:
-                    df = pd.read_csv(uploaded_file, encoding='utf-8')
+                try: df = pd.read_csv(uploaded_file, encoding='utf-8')
                 except UnicodeDecodeError:
-                    uploaded_file.seek(0)
-                    df = pd.read_csv(uploaded_file, encoding='cp1252')
+                    uploaded_file.seek(0); df = pd.read_csv(uploaded_file, encoding='cp1252')
                     st.info("File read with Windows-1252 encoding.")
             else:
                 df = pd.read_excel(uploaded_file)
@@ -454,33 +412,25 @@ def render_upr_calculator():
                 if end_date_col == "": end_date_col = None
 
             st.markdown("---")
-
             st.markdown('<div class="grouping-container"><h3>Grouping Columns</h3><p>Select the columns you want to group by (e.g., Line_of_Business, Currency). Results will be aggregated by these columns.</p></div>', unsafe_allow_html=True)
             grouping_options = [col for col in all_columns if col not in [start_date_col, end_date_col]]
             grouping_cols = st.multiselect("Choose columns to group results by (at least one required):", options=grouping_options, default=[grouping_options[0]] if grouping_options else [])
-            if not grouping_cols:
-                st.error("Please select at least one grouping column (e.g., Line_of_Business).")
-                st.stop()
+            if not grouping_cols: st.error("Please select at least one grouping column."); st.stop()
 
             st.markdown("---")
             st.markdown("### Select Numeric Columns for UPR Calculation")
             numeric_columns = []
             for col in df.columns:
                 if col in [start_date_col, end_date_col] + grouping_cols: continue
-                try:
-                    pd.to_numeric(df[col])
-                    numeric_columns.append(col)
+                try: pd.to_numeric(df[col]); numeric_columns.append(col)
                 except (ValueError, TypeError): pass
             numeric_columns = list(set(numeric_columns + [col for col in df.select_dtypes(include=[np.number]).columns.tolist() if col not in numeric_columns]))
-            if not numeric_columns:
-                st.error("No numeric columns found."); st.stop()
+            if not numeric_columns: st.error("No numeric columns found."); st.stop()
             selected_value_cols = st.multiselect("Choose the numeric columns you want to convert to UPR:", options=numeric_columns, default=numeric_columns[:min(4, len(numeric_columns))] if numeric_columns else [])
-            if not start_date_col or not end_date_col:
-                st.error("Please map all required date columns."); st.stop()
-            if not selected_value_cols:
-                st.warning("Please select at least one numeric column."); st.stop()
+            if not start_date_col or not end_date_col: st.error("Please map all required date columns."); st.stop()
+            if not selected_value_cols: st.warning("Please select at least one numeric column."); st.stop()
 
-            # Data Quality Checks
+            # DATA QUALITY CHECKS
             st.markdown("### Data Quality Checks")
             df_check = df.copy()
             df_check = df_check.rename(columns={start_date_col: 'Start_Date', end_date_col: 'End_Date'})
@@ -503,16 +453,13 @@ def render_upr_calculator():
             invalid_dates = df_check.dropna(subset=['Start_Date', 'End_Date'])
             invalid_dates = invalid_dates[invalid_dates['End_Date'] <= invalid_dates['Start_Date']]
             if len(invalid_dates) > 0:
-                has_critical_errors = True
-                error_messages.append(f"Found {len(invalid_dates)} row(s) where End_Date is not after Start_Date.")
+                has_critical_errors = True; error_messages.append(f"Found {len(invalid_dates)} row(s) where End_Date is not after Start_Date.")
                 st.error(f"{len(invalid_dates)} row(s) have End_Date <= Start_Date.")
             else: st.success("All valid dates have End_Date after Start_Date.")
 
             st.markdown("#### 3. Duplicate Entry Check")
             dup_rows = df_check[df_check.duplicated()]
-            if len(dup_rows) > 0:
-                warning_messages.append(f"Found {len(dup_rows)} exact duplicate row(s).")
-                st.warning(f"{len(dup_rows)} exact duplicate row(s) found.")
+            if len(dup_rows) > 0: warning_messages.append(f"Found {len(dup_rows)} exact duplicate row(s)."); st.warning(f"{len(dup_rows)} exact duplicate row(s) found.")
             else: st.success("No exact duplicate rows found.")
 
             st.markdown("#### Data Quality Summary")
@@ -528,9 +475,7 @@ def render_upr_calculator():
                 st.markdown('<div class="data-check-success"><b>All data quality checks passed!</b></div>', unsafe_allow_html=True)
             st.markdown("---")
 
-            if has_critical_errors:
-                st.error("Calculation cannot proceed due to critical data issues.")
-                st.stop()
+            if has_critical_errors: st.error("Calculation cannot proceed due to critical data issues."); st.stop()
 
             df_processed = df_check.dropna(subset=['Start_Date', 'End_Date'])
             df_processed = df_processed[df_processed['End_Date'] > df_processed['Start_Date']]
@@ -538,9 +483,7 @@ def render_upr_calculator():
                 if col in df_processed.columns: df_processed[col] = pd.to_numeric(df_processed[col], errors='coerce')
             df_processed["Duration"] = (df_processed["End_Date"] - df_processed["Start_Date"]).dt.days
             df_processed = df_processed[df_processed["Duration"] > 0]
-
-            if df_processed.empty:
-                st.error("No valid policies remaining."); st.stop()
+            if df_processed.empty: st.error("No valid policies remaining."); st.stop()
 
             if st.button("Calculate UPR", use_container_width=True):
                 with st.spinner("Calculating UPR..."):
@@ -550,18 +493,15 @@ def render_upr_calculator():
                         (valuation_date <= df_processed["End_Date"]) & (valuation_date >= df_processed["Start_Date"])
                     ]
                     if method == "365th (exact days)":
-                        total = df_processed["Duration"]
-                        remaining = (df_processed["End_Date"] - valuation_date).dt.days
+                        total = df_processed["Duration"]; remaining = (df_processed["End_Date"] - valuation_date).dt.days
                         choices = [1, 0, remaining / total]
                     elif method == "24th (half-month)":
                         interval_days = 365.25 / 24
-                        total = df_processed["Duration"] / interval_days
-                        remaining = (df_processed["End_Date"] - valuation_date).dt.days / interval_days
+                        total = df_processed["Duration"] / interval_days; remaining = (df_processed["End_Date"] - valuation_date).dt.days / interval_days
                         choices = [1, 0, remaining / total]
                     else:
                         interval_days = 365.25 / 8
-                        total = df_processed["Duration"] / interval_days
-                        remaining = (df_processed["End_Date"] - valuation_date).dt.days / interval_days
+                        total = df_processed["Duration"] / interval_days; remaining = (df_processed["End_Date"] - valuation_date).dt.days / interval_days
                         choices = [1, 0, remaining / total]
 
                     df_processed["Unearned_portion"] = np.select(conditions, choices, default=np.nan)
@@ -576,8 +516,7 @@ def render_upr_calculator():
                     st.subheader("UPR Results by " + ", ".join(grouping_cols))
                     display_result = result.copy()
                     for col in display_result.columns:
-                        if col not in grouping_cols:
-                            display_result[col] = display_result[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else "N/A")
+                        if col not in grouping_cols: display_result[col] = display_result[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else "N/A")
                     st.dataframe(display_result, use_container_width=True)
                     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -585,11 +524,9 @@ def render_upr_calculator():
                     with pd.ExcelWriter(output, engine='openpyxl') as writer:
                         result.to_excel(writer, index=False, sheet_name='UPR_Results')
                     output.seek(0)
-
                     safe_client = re.sub(r'[\\/*?:"<>|]', "", client_name).strip() or "Client"
                     safe_original = re.sub(r'[\\/*?:"<>|]', "", base_filename).strip() or "Data"
-                    file_name = f"{safe_client}_{safe_original}_UPR_Results.xlsx"
-                    st.download_button("Download results as Excel", data=output, file_name=file_name, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    st.download_button("Download results as Excel", data=output, file_name=f"{safe_client}_{safe_original}_UPR_Results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         except Exception as e:
             st.error(f"An error occurred: {e}")
@@ -599,82 +536,305 @@ def render_upr_calculator():
 
 
 # =============================================================================
-#  PLACEHOLDER CALCULATORS
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  LOSS COMPONENT CALCULATOR — INSERT CODE BELOW                          ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
 # =============================================================================
-
-def render_placeholder(title, parent_page, parent_breadcrumb):
-    show_breadcrumb()
-    st.markdown(f"## {title}")
-    st.info(f"{title} — Insert your implementation here")
-    back_button(parent_page, parent_breadcrumb)
-
 
 def render_loss_component():
-    render_placeholder("Loss Component Calculator", 'lrc', ['Home', 'LRC'])
+    """Loss Component Calculator."""
+    show_breadcrumb()
+    st.markdown("## Loss Component Calculator")
 
-def render_ocr_calculator():
-    render_placeholder("OCR — Outstanding Claims Reserve Calculator", 'fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR LOSS COMPONENT CALCULATOR CODE HERE                    ║
+    # ║  Replace this entire function body with your Streamlit code         ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
 
-def render_ibnr_percentage():
-    render_placeholder("IBNR Percentage Method Calculator", 'ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
-
-def render_bcl_calculator():
-    render_placeholder("Basic Chain Ladder (BCL) IBNR Calculator", 'ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
-
-def render_capecod_calculator():
-    render_placeholder("Cape Cod IBNR Calculator", 'ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
-
-def render_bf_calculator():
-    render_placeholder("Bornhuetter-Ferguson (BF) IBNR Calculator", 'ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
-
-def render_elr_calculator():
-    render_placeholder("Expected Loss Ratio (ELR) IBNR Calculator", 'ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
-
-def render_acpc_calculator():
-    render_placeholder("Average Cost Per Claim (ACPC) IBNR Calculator", 'ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
-
-def render_ulae_calculator():
-    render_placeholder("ULAE — Unallocated Loss Adjustment Expenses Calculator", 'fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
-
-def render_npr_calculator():
-    render_placeholder("NPR — Non-Performance Risk (Reinsurance) Calculator", 'fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
-
-def render_mack_calculator():
-    render_placeholder("Mack Method — Risk Adjustment Calculator", 'risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
-
-def render_bootstrap_calculator():
-    render_placeholder("Bootstrap — Stochastic Reserving Calculator", 'risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
-
-def render_var_calculator():
-    render_placeholder("Value at Risk (VaR) — Risk Adjustment Calculator", 'risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
-
-def render_coc_calculator():
-    render_placeholder("Cost of Capital — Risk Adjustment Calculator", 'risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
+    st.info("Loss Component Calculator — Pending implementation")
+    back_button('lrc', ['Home', 'LRC'])
 
 
 # =============================================================================
-#  MAIN ROUTER
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  OCR CALCULATOR — INSERT CODE BELOW                                     ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_ocr_calculator():
+    """OCR Calculator."""
+    show_breadcrumb()
+    st.markdown("## OCR — Outstanding Claims Reserve Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR OCR CALCULATOR CODE HERE                               ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("OCR Calculator — Pending implementation")
+    back_button('fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  IBNR PERCENTAGE METHOD — INSERT CODE BELOW                             ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_ibnr_percentage():
+    """IBNR Percentage Method."""
+    show_breadcrumb()
+    st.markdown("## IBNR Percentage Method Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR IBNR PERCENTAGE METHOD CODE HERE                       ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("IBNR Percentage Method — Pending implementation")
+    back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  BASIC CHAIN LADDER (BCL) — INSERT CODE BELOW                           ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_bcl_calculator():
+    """Basic Chain Ladder Calculator."""
+    show_breadcrumb()
+    st.markdown("## Basic Chain Ladder (BCL) IBNR Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR BCL CALCULATOR CODE HERE                               ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("Basic Chain Ladder — Pending implementation")
+    back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  CAPE COD — INSERT CODE BELOW                                           ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_capecod_calculator():
+    """Cape Cod Calculator."""
+    show_breadcrumb()
+    st.markdown("## Cape Cod IBNR Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR CAPE COD CALCULATOR CODE HERE                          ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("Cape Cod — Pending implementation")
+    back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  BORNHUETTER-FERGUSON (BF) — INSERT CODE BELOW                          ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_bf_calculator():
+    """Bornhuetter-Ferguson Calculator."""
+    show_breadcrumb()
+    st.markdown("## Bornhuetter-Ferguson (BF) IBNR Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR BF CALCULATOR CODE HERE                                ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("Bornhuetter-Ferguson — Pending implementation")
+    back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  EXPECTED LOSS RATIO (ELR) — INSERT CODE BELOW                          ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_elr_calculator():
+    """Expected Loss Ratio Calculator."""
+    show_breadcrumb()
+    st.markdown("## Expected Loss Ratio (ELR) IBNR Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR ELR CALCULATOR CODE HERE                               ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("Expected Loss Ratio — Pending implementation")
+    back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  AVERAGE COST PER CLAIM (ACPC) — INSERT CODE BELOW                      ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_acpc_calculator():
+    """Average Cost Per Claim Calculator."""
+    show_breadcrumb()
+    st.markdown("## Average Cost Per Claim (ACPC) IBNR Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR ACPC CALCULATOR CODE HERE                              ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("Average Cost Per Claim — Pending implementation")
+    back_button('ibnr_menu', ['Home', 'LIC', 'Fulfilment Cashflows', 'IBNR Methods'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  ULAE CALCULATOR — INSERT CODE BELOW                                    ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_ulae_calculator():
+    """ULAE Calculator."""
+    show_breadcrumb()
+    st.markdown("## ULAE — Unallocated Loss Adjustment Expenses Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR ULAE CALCULATOR CODE HERE                              ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("ULAE Calculator — Pending implementation")
+    back_button('fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  NPR CALCULATOR — INSERT CODE BELOW                                     ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_npr_calculator():
+    """NPR Calculator."""
+    show_breadcrumb()
+    st.markdown("## NPR — Non-Performance Risk (Reinsurance) Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR NPR CALCULATOR CODE HERE                               ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("NPR Calculator — Pending implementation")
+    back_button('fulfilment_cashflows', ['Home', 'LIC', 'Fulfilment Cashflows'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  MACK METHOD — INSERT CODE BELOW                                        ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_mack_calculator():
+    """Mack Method Calculator."""
+    show_breadcrumb()
+    st.markdown("## Mack Method — Risk Adjustment Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR MACK METHOD CODE HERE                                  ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("Mack Method — Pending implementation")
+    back_button('risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  BOOTSTRAP — INSERT CODE BELOW                                          ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_bootstrap_calculator():
+    """Bootstrap Calculator."""
+    show_breadcrumb()
+    st.markdown("## Bootstrap — Stochastic Reserving Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR BOOTSTRAP CALCULATOR CODE HERE                         ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("Bootstrap — Pending implementation")
+    back_button('risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  VALUE AT RISK (VaR) — INSERT CODE BELOW                                ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_var_calculator():
+    """Value at Risk Calculator."""
+    show_breadcrumb()
+    st.markdown("## Value at Risk (VaR) — Risk Adjustment Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR VAR CALCULATOR CODE HERE                               ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("Value at Risk — Pending implementation")
+    back_button('risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
+
+
+# =============================================================================
+#  ╔══════════════════════════════════════════════════════════════════════════╗
+#  ║  COST OF CAPITAL — INSERT CODE BELOW                                    ║
+#  ╚══════════════════════════════════════════════════════════════════════════╝
+# =============================================================================
+
+def render_coc_calculator():
+    """Cost of Capital Calculator."""
+    show_breadcrumb()
+    st.markdown("## Cost of Capital — Risk Adjustment Calculator")
+
+    # ╔══════════════════════════════════════════════════════════════════════╗
+    # ║  INSERT YOUR COST OF CAPITAL CODE HERE                              ║
+    # ╚══════════════════════════════════════════════════════════════════════╝
+
+    st.info("Cost of Capital — Pending implementation")
+    back_button('risk_adjustment', ['Home', 'LIC', 'Risk Adjustment'])
+
+
+# =============================================================================
+#  MAIN ROUTER — Maps page names to renderer functions
 # =============================================================================
 
 page_renderers = {
-    'home': render_home, 'lrc': render_lrc, 'lic': render_lic,
+    # Navigation menus
+    'home': render_home,
+    'lrc': render_lrc,
+    'lic': render_lic,
     'fulfilment_cashflows': render_fulfilment_cashflows,
-    'ibnr_menu': render_ibnr_menu, 'risk_adjustment': render_risk_adjustment,
-    'upr_calculator': render_upr_calculator,
-    'loss_component': render_loss_component,
-    'ocr_calculator': render_ocr_calculator,
-    'ibnr_percentage': render_ibnr_percentage,
-    'bcl_calculator': render_bcl_calculator,
-    'capecod_calculator': render_capecod_calculator,
-    'bf_calculator': render_bf_calculator,
-    'elr_calculator': render_elr_calculator,
-    'acpc_calculator': render_acpc_calculator,
-    'ulae_calculator': render_ulae_calculator,
-    'npr_calculator': render_npr_calculator,
-    'mack_calculator': render_mack_calculator,
-    'bootstrap_calculator': render_bootstrap_calculator,
-    'var_calculator': render_var_calculator,
-    'coc_calculator': render_coc_calculator,
+    'ibnr_menu': render_ibnr_menu,
+    'risk_adjustment': render_risk_adjustment,
+
+    # LRC Calculators
+    'upr_calculator': render_upr_calculator,        # COMPLETE
+    'loss_component': render_loss_component,         # PENDING
+
+    # Fulfilment Cashflows Calculators
+    'ocr_calculator': render_ocr_calculator,         # PENDING
+    'ibnr_percentage': render_ibnr_percentage,       # PENDING
+    'bcl_calculator': render_bcl_calculator,         # PENDING
+    'capecod_calculator': render_capecod_calculator, # PENDING
+    'bf_calculator': render_bf_calculator,           # PENDING
+    'elr_calculator': render_elr_calculator,         # PENDING
+    'acpc_calculator': render_acpc_calculator,       # PENDING
+    'ulae_calculator': render_ulae_calculator,       # PENDING
+    'npr_calculator': render_npr_calculator,         # PENDING
+
+    # Risk Adjustment Calculators
+    'mack_calculator': render_mack_calculator,       # PENDING
+    'bootstrap_calculator': render_bootstrap_calculator, # PENDING
+    'var_calculator': render_var_calculator,         # PENDING
+    'coc_calculator': render_coc_calculator,         # PENDING
 }
 
 current_page = st.session_state.page

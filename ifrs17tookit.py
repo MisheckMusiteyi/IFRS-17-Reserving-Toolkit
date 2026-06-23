@@ -511,6 +511,298 @@ def render_bcl_calculator():
     show_breadcrumb(); st.markdown("## Basic Chain Ladder (BCL) IBNR Calculator")
     # ╔══ INSERT BCL CODE HERE ══╗
     st.info("Basic Chain Ladder — Pending implementation")
+    # =============================================================================
+#  BASIC CHAIN LADDER (BCL) CALCULATOR — COMPLETE
+# =============================================================================
+
+def render_bcl_calculator():
+    """Basic Chain Ladder IBNR Calculator with Inflation & Discounting."""
+    show_breadcrumb()
+    st.markdown('<div class="hero"><h1>Basic Chain Ladder (BCL) IBNR Calculator</h1><p>Upload claims data. Select period, grain, grouping, and amounts. Choose LDF method with stability diagnostics. Optional inflation adjustment and discounting.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-container">', unsafe_allow_html=True)
+
+    # ---- Session state for BCL ----
+    if 'bcl_df' not in st.session_state: st.session_state.bcl_df = None
+    if 'bcl_factors' not in st.session_state: st.session_state.bcl_factors = None
+    if 'bcl_results' not in st.session_state: st.session_state.bcl_results = None
+    if 'bcl_cum_inflation' not in st.session_state: st.session_state.bcl_cum_inflation = None
+    if 'bcl_per_period' not in st.session_state: st.session_state.bcl_per_period = None
+
+    # ---- Client & Period ----
+    col1, col2 = st.columns(2)
+    with col1: client_name = st.text_input("Client Name", value="Client", key="bcl_cn").strip()
+    with col2: pass
+
+    st.markdown('<div class="section-container"><h3>IBNR Period & Grain</h3></div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    with c1: from_date = st.date_input("From Date", value=date(2021,1,1), key="bcl_fd")
+    with c2: to_date = st.date_input("To Date", value=date(2025,12,31), key="bcl_td")
+    with c3: grain = st.selectbox("Grain", ["Yearly","Half-Yearly","Quarterly","Monthly"], key="bcl_gr")
+    grain_map = {"Yearly":"Y","Half-Yearly":"H","Quarterly":"Q","Monthly":"M"}
+    grain_key = grain_map[grain]
+    from_date_dt = pd.to_datetime(from_date); to_date_dt = pd.to_datetime(to_date)
+    st.info(f"Period: {from_date} to {to_date} | Grain: {grain}")
+
+    # ---- File Upload ----
+    st.markdown('<div class="section-container"><h3>Upload Claims Data</h3></div>', unsafe_allow_html=True)
+    uploaded_file = st.file_uploader("Choose claims file", type=["csv","xlsx","xls"], key="bcl_f")
+    
+    if uploaded_file is not None:
+        try:
+            ext = uploaded_file.name.split('.')[-1].lower()
+            if ext == 'csv':
+                try: df = pd.read_csv(uploaded_file, encoding='utf-8')
+                except: uploaded_file.seek(0); df = pd.read_csv(uploaded_file, encoding='cp1252')
+            else: df = pd.read_excel(uploaded_file)
+            unnamed = [c for c in df.columns if c.startswith('Unnamed:')]
+            if unnamed: df = df.drop(columns=unnamed)
+            st.markdown("#### Preview"); st.dataframe(df.head())
+            
+            st.markdown("### Map Columns")
+            all_cols = df.columns.tolist()
+            c1, c2 = st.columns(2)
+            with c1: loss_col = st.selectbox("Loss Date column", [""]+all_cols, key="bcl_lc")
+            with c2: report_col = st.selectbox("Report Date column", [""]+all_cols, key="bcl_rc")
+            if not loss_col or not report_col: st.warning("Select both date columns."); st.stop()
+            
+            remaining = [c for c in all_cols if c not in [loss_col, report_col]]
+            grouping_cols = st.multiselect("Grouping columns (optional)", remaining, key="bcl_gc")
+            
+            num_cands = [c for c in df.columns if c not in [loss_col,report_col]+grouping_cols and pd.api.types.is_numeric_dtype(df[c])]
+            if not num_cands: st.error("No numeric columns."); st.stop()
+            amount_cols = st.multiselect("Claim Amount columns", num_cands, key="bcl_ac")
+            if not amount_cols: st.warning("Select at least one amount column."); st.stop()
+
+            # Process data
+            df[loss_col] = pd.to_datetime(df[loss_col], errors='coerce')
+            df[report_col] = pd.to_datetime(df[report_col], errors='coerce')
+            df = df.dropna(subset=[loss_col, report_col])
+            df_filtered = df[(df[loss_col]>=from_date_dt)&(df[loss_col]<=to_date_dt)].copy()
+            if df_filtered.empty: st.error("No data in selected period."); st.stop()
+            st.success(f"{len(df_filtered)} records in period")
+
+            # Calculate periods
+            if grain_key == 'Y': n_periods = to_date_dt.year - from_date_dt.year + 1
+            elif grain_key == 'M': n_periods = (to_date_dt.year-from_date_dt.year)*12 + (to_date_dt.month-from_date_dt.month) + 1
+            elif grain_key == 'Q': n_periods = (to_date_dt.year-from_date_dt.year)*4 + ((to_date_dt.month-1)//3-(from_date_dt.month-1)//3) + 1
+            else: n_periods = (to_date_dt.year-from_date_dt.year)*2 + ((to_date_dt.month-1)//6-(from_date_dt.month-1)//6) + 1
+
+            # Discounting & Inflation
+            st.markdown("---"); st.markdown("### Options")
+            c1, c2 = st.columns(2)
+            with c1:
+                use_discounting = st.checkbox("Apply Discounting", key="bcl_ud")
+                spot_rates = None; flat_rate = None
+                if use_discounting:
+                    use_curve = st.checkbox("Use Yield Curve", key="bcl_uc")
+                    if use_curve:
+                        yc_file = st.file_uploader("Yield Curve file (Maturity, Rate%)", type=["csv","xlsx","xls"], key="bcl_yc")
+                        if yc_file is not None:
+                            yc_ext = yc_file.name.split('.')[-1].lower()
+                            yc_df = pd.read_csv(yc_file) if yc_ext=='csv' else pd.read_excel(yc_file)
+                            yc_df = yc_df.dropna()
+                            if len(yc_df.columns)>=2:
+                                maturities = pd.to_numeric(yc_df.iloc[:,0], errors='coerce').values
+                                rates = pd.to_numeric(yc_df.iloc[:,1], errors='coerce').values/100
+                                ppy = periods_per_year(grain_key)
+                                pm = np.arange(1,61)/ppy
+                                if len(maturities)>=4: f_int = interpolate.CubicSpline(maturities, rates, extrapolate=True)
+                                else: f_int = interpolate.interp1d(maturities, rates, kind='linear', fill_value='extrapolate')
+                                spot_rates = np.clip(f_int(pm), 0, 1.0)
+                    else: flat_rate = st.number_input("Annual discount rate (%)", 0.0, 50.0, 5.0, key="bcl_fr")/100
+            with c2:
+                use_inflation = st.checkbox("Apply Inflation Adjustment", key="bcl_ui")
+                cum_inflation = None; per_period_rates = None
+                if use_inflation:
+                    inf_file = st.file_uploader("Inflation file (Period, Rate%)", type=["csv","xlsx","xls"], key="bcl_if")
+                    if inf_file is not None:
+                        inf_ext = inf_file.name.split('.')[-1].lower()
+                        inf_df = pd.read_csv(inf_file) if inf_ext=='csv' else pd.read_excel(inf_file)
+                        inf_df = inf_df.dropna()
+                        if len(inf_df.columns)>=2:
+                            inf_rates = pd.to_numeric(inf_df.iloc[:,1], errors='coerce').fillna(0)/100
+                            ppy_tgt = periods_per_year(grain_key)
+                            x_inf = np.arange(len(inf_rates))
+                            x_tgt = np.arange(int(x_inf[-1])+1) if len(inf_rates)>0 else np.arange(n_periods)
+                            if len(inf_rates)>=4: f_int = interpolate.CubicSpline(x_inf, inf_rates, extrapolate=True)
+                            else: f_int = interpolate.interp1d(x_inf, inf_rates, kind='linear', fill_value='extrapolate')
+                            annual_tgt = np.clip(f_int(x_tgt), -0.5, 2.0)
+                            per_period_rates = (1+annual_tgt)**(1/ppy_tgt)-1
+                            cum_inflation = np.cumprod(1+per_period_rates)
+
+            # ---- LDF Selection & Calculate ----
+            st.markdown("---"); st.markdown("### LDF Selection & Calculation")
+            
+            # Get groups
+            if grouping_cols: groups = df_filtered[grouping_cols].drop_duplicates().to_dict("records")
+            else: groups = [{"__all__":"All Data"}]
+
+            if st.button("Run Chain Ladder", key="bcl_run", use_container_width=True):
+                all_summary = []; all_detail = []; all_factors = []
+                
+                for grp in groups:
+                    if "__all__" in grp: gdf = df_filtered.copy(); glabel = "All Data"
+                    else:
+                        mask = pd.Series(True, index=df_filtered.index)
+                        for col, val in grp.items(): mask &= (df_filtered[col]==val)
+                        gdf = df_filtered[mask].copy(); glabel = " | ".join(str(v) for v in grp.values())
+                    
+                    for ac in amount_cols:
+                        label = f"{glabel} | {ac}"
+                        st.markdown(f"**{label}**")
+                        
+                        # Build triangles
+                        gdf["__ap"] = gdf[loss_col].apply(lambda d: (d.year-from_date_dt.year) if grain_key=='Y' else ((d.year-from_date_dt.year)*12+(d.month-from_date_dt.month)))
+                        gdf["__dp"] = gdf.apply(lambda r: max(0, min((r[report_col].year-r[loss_col].year) if grain_key=='Y' else ((r[report_col].year-r[loss_col].year)*12+(r[report_col].month-r[loss_col].month)), n_periods-1)), axis=1)
+                        gdf = gdf[(gdf["__ap"]>=0)&(gdf["__ap"]<n_periods)]
+                        
+                        pivot = gdf.pivot_table(index="__ap", columns="__dp", values=ac, aggfunc="sum")
+                        for ap in range(n_periods):
+                            if ap not in pivot.index: pivot.loc[ap] = np.nan
+                        for dp in range(n_periods):
+                            if dp not in pivot.columns: pivot[dp] = np.nan
+                        inc = pivot.sort_index()[sorted(pivot.columns)].astype(float)
+                        
+                        obs_mask = pd.DataFrame(False, index=inc.index, columns=inc.columns)
+                        for ap in inc.index:
+                            for dp in inc.columns:
+                                if ap+dp < n_periods: obs_mask.loc[ap, dp] = pd.notna(inc.loc[ap, dp])
+                        for ap in inc.index:
+                            for dp in inc.columns:
+                                if ap+dp >= n_periods: inc.loc[ap, dp] = np.nan
+                        
+                        cum = inc.copy()
+                        for ap in inc.index:
+                            has_obs = any(pd.notna(inc.loc[ap, dp]) for dp in inc.columns if ap+dp<n_periods)
+                            if not has_obs: cum.loc[ap]=np.nan; continue
+                            running = 0.0
+                            for dp in sorted(inc.columns):
+                                if ap+dp<n_periods:
+                                    v = inc.loc[ap, dp]; running += v if pd.notna(v) else 0.0; cum.loc[ap, dp]=running
+                                else: cum.loc[ap, dp]=np.nan
+                        
+                        cum_filled = cum.fillna(0)
+                        
+                        # Deflate
+                        working_cum = cum_filled
+                        if use_inflation and cum_inflation is not None:
+                            valuation_idx = n_periods-1
+                            if len(cum_inflation)<=valuation_idx: cum_inflation=np.append(cum_inflation,[cum_inflation[-1]]*(valuation_idx-len(cum_inflation)+1))
+                            inf_val = cum_inflation[valuation_idx]
+                            real_inc = inc.copy().astype(float)
+                            for ap in inc.index:
+                                for dp in inc.columns:
+                                    if ap+dp>=n_periods: continue
+                                    val = inc.loc[ap, dp]
+                                    if pd.isna(val): continue
+                                    t = ap+dp
+                                    inf_t = cum_inflation[min(t, len(cum_inflation)-1)]
+                                    real_inc.loc[ap, dp] = val*(inf_val/inf_t) if inf_t>0 else val
+                            working_cum = real_inc.cumsum(axis=1).fillna(0)
+                        
+                        # Calculate factors
+                        n_ay, n_dp = working_cum.shape
+                        vw = []; sa = []
+                        for j in range(n_dp-1):
+                            num, den = 0.0, 0.0; indiv = []
+                            for i in range(n_ay):
+                                if i+j+1<n_ay:
+                                    c = working_cum.iloc[i,j]; n = working_cum.iloc[i,j+1]
+                                    if c>0: num+=n; den+=c; indiv.append(n/c)
+                            vw.append(num/den if den>0 else 1.0)
+                            sa.append(np.mean(indiv) if indiv else 1.0)
+                        
+                        # Show LDF comparison
+                        ldf_df = pd.DataFrame({"Dev Period":range(1,n_dp),"Vol-Weighted":[round(f,4) for f in vw],"Simple Avg":[round(f,4) for f in sa]})
+                        st.dataframe(ldf_df, use_container_width=True)
+                        
+                        # User selects method
+                        method = st.selectbox("Select LDF Method", ["Volume-Weighted","Simple Average"], key=f"bcl_m_{label}")
+                        factors = vw if method=="Volume-Weighted" else sa
+                        
+                        # Project
+                        completed = working_cum.copy().astype(float)
+                        for i in range(n_ay):
+                            last_obs = -1
+                            for j in range(n_dp-1,-1,-1):
+                                if i+j<n_ay: last_obs=j; break
+                            if last_obs<0: continue
+                            for j in range(last_obs,n_dp-1):
+                                if j<len(factors):
+                                    prev = completed.iloc[i,j]
+                                    completed.iloc[i,j+1] = prev*factors[j] if prev>0 else 0.0
+                        
+                        cdfs = []
+                        running = 1.0
+                        for f in reversed(factors): running*=f; cdfs.insert(0, running)
+                        
+                        # Results
+                        rows = []
+                        for i in range(n_ay):
+                            last_obs = -1
+                            for j in range(n_dp-1,-1,-1):
+                                if i+j<n_ay: last_obs=j; break
+                            if last_obs<0: continue
+                            current = working_cum.iloc[i,last_obs]
+                            ultimate = completed.iloc[i,n_dp-1]
+                            ibnr = max(ultimate-current,0.0)
+                            cdf = cdfs[last_obs] if last_obs<len(cdfs) else 1.0
+                            rows.append({"AP":i,"Current":current,"Ultimate":ultimate,"IBNR":ibnr,"CDF":cdf})
+                        
+                        res_df = pd.DataFrame(rows)
+                        res_df["IBNR_Nominal"] = res_df["IBNR"]
+                        
+                        # Re-inflate
+                        if use_inflation and cum_inflation is not None and per_period_rates is not None:
+                            valuation_idx = n_periods-1
+                            last_rate = per_period_rates[-1] if len(per_period_rates)>0 else 0.0
+                            def fci(tf):
+                                factor=1.0
+                                for k in range(valuation_idx+1,tf+1):
+                                    ki=k-valuation_idx-1; r=per_period_rates[ki] if ki<len(per_period_rates) else last_rate; factor*=(1.0+r)
+                                return factor
+                            nominal_map = {}
+                            for i in completed.index:
+                                last_obs=-1
+                                for j in range(n_dp-1,-1,-1):
+                                    if i+j<n_ay and pd.notna(working_cum.iloc[i,j]): last_obs=j; break
+                                if last_obs<0: nominal_map[i]=0.0; continue
+                                total=0.0; dp_cols=sorted(completed.columns)
+                                for idx_dp,dp in enumerate(dp_cols):
+                                    if dp<=last_obs: continue
+                                    cum_curr=completed.iloc[i,dp]
+                                    cum_prev=completed.iloc[i,dp_cols[idx_dp-1]] if idx_dp>0 else 0.0
+                                    inc_r=max(cum_curr-cum_prev,0.0)
+                                    if inc_r<=0: continue
+                                    total+=inc_r*fci(i+dp)
+                                nominal_map[i]=total
+                            res_df["IBNR_Nominal"] = res_df["AP"].map(lambda ap: nominal_map.get(ap,0.0))
+                        
+                        nom_total = res_df["IBNR_Nominal"].sum()
+                        st.metric("Total IBNR (Nominal)", f"{nom_total:,.2f}")
+                        disp = res_df.copy()
+                        for c in ["Current","Ultimate","IBNR","IBNR_Nominal"]:
+                            if c in disp.columns: disp[c] = disp[c].apply(lambda x: f"{x:,.2f}")
+                        st.dataframe(disp, use_container_width=True)
+                        
+                        all_summary.append({"Group":glabel,"Amount":ac,"IBNR_Nominal":nom_total})
+                        all_detail.append(res_df)
+                
+                if all_summary:
+                    st.markdown("### Overall Summary")
+                    st.dataframe(pd.DataFrame(all_summary), use_container_width=True)
+                    
+                    output = BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as w:
+                        pd.DataFrame(all_summary).to_excel(w, index=False, sheet_name='IBNR_Summary')
+                        if all_detail: pd.concat(all_detail).to_excel(w, index=False, sheet_name='IBNR_Detail')
+                    output.seek(0)
+                    sc = re.sub(r'[\\/*?:"<>|]',"",client_name).strip() or "Client"
+                    st.download_button("Download Excel", data=output, file_name=f"{sc}_BCL_IBNR_Results.xlsx", key="bcl_dl", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        except Exception as e: st.error(f"Error: {e}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     # ╚══════════════════════════╝
     back_button('ibnr_menu',['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
 

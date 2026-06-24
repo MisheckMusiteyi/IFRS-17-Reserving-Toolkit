@@ -64,6 +64,7 @@ st.markdown("""
 if 'page' not in st.session_state: st.session_state.page = 'home'
 if 'breadcrumb' not in st.session_state: st.session_state.breadcrumb = ['Home']
 if 'report_metadata' not in st.session_state: st.session_state.report_metadata = {}
+if 'fv_results' not in st.session_state: st.session_state.fv_results = {}
 
 def navigate_to(page, breadcrumb_label=None):
     st.session_state.page = page
@@ -92,7 +93,6 @@ def back_button(target_page, target_breadcrumb):
 def render_home():
     st.markdown('<div class="hero"><h1>Next Vantage</h1><p>Comprehensive Actuarial Reserving Toolkit — IFRS 17 Compliant</p></div>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
-    
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown('<div class="card"><h3>Full IFRS 17 Valuation</h3><p>Complete valuation with Income Statement & Liability Rollforward</p></div>', unsafe_allow_html=True)
@@ -111,11 +111,11 @@ def render_full_valuation():
     st.markdown('<div class="main-container">', unsafe_allow_html=True)
     
     # ---- REPORT METADATA ----
-    st.markdown('<div class="section-container"><h3>Report Metadata</h3><p>This information appears on the output report.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-container"><h3>Report Metadata</h3></div>', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
-    with c1: report_created_by = st.text_input("Created By", value="", key="fv_cb", placeholder="e.g. nelias")
+    with c1: report_created_by = st.text_input("Created By", value="", key="fv_cb")
     with c2: report_version = st.text_input("Version", value="3.9.29.3", key="fv_ver")
-    with c3: report_client = st.text_input("Client Name", value="", key="fv_client", placeholder="e.g. Green13 Iris-Data")
+    with c3: report_client = st.text_input("Client Name", value="", key="fv_client")
     with c4: report_date = st.date_input("Valuation Date", value=date.today(), key="fv_vd")
     
     run_id = f"DN{hash(str(datetime.now())):x}"[:40]
@@ -131,264 +131,446 @@ def render_full_valuation():
     """, unsafe_allow_html=True)
     
     st.session_state.report_metadata = {
-        'created_by': report_created_by,
-        'version': report_version,
-        'client': report_client,
-        'valuation_date': str(report_date),
-        'run_id': run_id,
-        'creation_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        'created_by': report_created_by, 'version': report_version,
+        'client': report_client, 'valuation_date': str(report_date),
+        'run_id': run_id, 'creation_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
     
-    # ---- SELECT RESERVES TO CALCULATE ----
-    st.markdown('<div class="section-container"><h3>Select Reserves to Calculate</h3><p>Choose which reserves to include in the valuation.</p></div>', unsafe_allow_html=True)
-    
-    st.markdown("**LRC — Liability for Remaining Coverage:**")
+    # ---- SELECT RESERVES ----
+    st.markdown('<div class="section-container"><h3>Select Reserves to Calculate</h3></div>', unsafe_allow_html=True)
+    st.markdown("**LRC:**")
     c1, c2 = st.columns(2)
-    with c1: calc_upr = st.checkbox("UPR (Unearned Premium Reserve)", value=True, key="fv_upr")
-    with c2: calc_loss_comp = st.checkbox("Loss Component", value=False, key="fv_lc", help="Only needed if onerous contracts exist")
+    with c1: calc_upr = st.checkbox("UPR", value=True, key="fv_upr")
+    with c2: calc_loss_comp = st.checkbox("Loss Component", value=False, key="fv_lc")
     
-    st.markdown("**LIC — Liability for Incurred Claims:**")
+    st.markdown("**LIC — Fulfilment Cashflows:**")
     c1, c2 = st.columns(2)
     with c1:
         calc_ocr = st.checkbox("OCR (Case Reserves)", value=True, key="fv_ocr")
         calc_ibnr = st.checkbox("IBNR (Chain Ladder)", value=True, key="fv_ibnr")
     with c2:
-        calc_ulae = st.checkbox("ULAE", value=True, key="fv_ulae")
-        calc_npr = st.checkbox("NPR (Reinsurance Non-Performance Risk)", value=True, key="fv_npr")
+        calc_ulae = st.checkbox("ULAE (auto from OCR+IBNR)", value=True, key="fv_ulae")
+        calc_npr = st.checkbox("NPR", value=False, key="fv_npr")
     
     st.markdown("**Risk Adjustment:**")
     calc_ra = st.checkbox("Bootstrap @ 90% CI", value=True, key="fv_ra")
     
-    selected_reserves = []
-    if calc_upr: selected_reserves.append("UPR")
-    if calc_loss_comp: selected_reserves.append("Loss Component")
-    if calc_ocr: selected_reserves.append("OCR")
-    if calc_ibnr: selected_reserves.append("IBNR")
-    if calc_ulae: selected_reserves.append("ULAE")
-    if calc_npr: selected_reserves.append("NPR")
-    if calc_ra: selected_reserves.append("RA (Bootstrap)")
-    st.info(f"Selected: {', '.join(selected_reserves) if selected_reserves else 'None'}")
+    selected = []
+    if calc_upr: selected.append("UPR")
+    if calc_ocr: selected.append("OCR")
+    if calc_ibnr: selected.append("IBNR")
+    if calc_ulae: selected.append("ULAE")
+    if calc_ra: selected.append("RA")
+    st.info(f"Selected: {', '.join(selected) if selected else 'None'}")
     
     # ---- OPENING BALANCES ----
-    st.markdown('<div class="section-container"><h3>Opening Balances</h3><p>Upload prior period closing balances (carried forward).</p></div>', unsafe_allow_html=True)
-    opening_file = st.file_uploader("Opening Balances file (CSV/Excel)", type=["csv","xlsx","xls"], key="fv_ob")
-    opening_df = None
-    if opening_file is not None:
-        try:
-            ext = opening_file.name.split('.')[-1].lower()
-            if ext == 'csv':
-                try: opening_df = pd.read_csv(opening_file, encoding='utf-8')
-                except: opening_file.seek(0); opening_df = pd.read_csv(opening_file, encoding='cp1252')
-            else: opening_df = pd.read_excel(opening_file)
-            st.success(f"Loaded {len(opening_df)} portfolio(s)")
-            st.dataframe(opening_df, use_container_width=True)
-        except Exception as e: st.error(f"Error: {e}")
+    st.markdown('<div class="section-container"><h3>Opening Balances</h3></div>', unsafe_allow_html=True)
+    opening_file = st.file_uploader("Opening Balances (CSV/Excel)", type=["csv","xlsx","xls"], key="fv_ob")
     
-    # ---- VALUATION DATA FILES ----
-    st.markdown('<div class="section-container"><h3>Valuation Data Files</h3><p>Upload all required data files for the selected reserves.</p></div>', unsafe_allow_html=True)
+    # ---- DATA FILES ----
+    st.markdown('<div class="section-container"><h3>Valuation Data Files</h3></div>', unsafe_allow_html=True)
     
-    data_files = {}
+    upr_file = None; ocr_file = None; claims_file = None
+    apportionment_file = None; cashflow_file = None
+    
     if calc_upr:
-        data_files['upr'] = st.file_uploader("UPR Data (Start_Date, End_Date, LOB, Premium)", type=["csv","xlsx","xls"], key="fv_upr_f")
+        upr_file = st.file_uploader("UPR Data (Start_Date, End_Date, LOB, Premium)", type=["csv","xlsx","xls"], key="fv_upr_f")
     if calc_ocr:
-        data_files['ocr'] = st.file_uploader("OCR Data (LOB, Case_Reserve)", type=["csv","xlsx","xls"], key="fv_ocr_f")
-    if calc_ibnr:
-        data_files['claims'] = st.file_uploader("Claims Triangle Data (Loss_Date, Report_Date, Amount, LOB)", type=["csv","xlsx","xls"], key="fv_cl_f")
+        ocr_file = st.file_uploader("OCR Data (LOB, Claim_Reference, Case_Reserve)", type=["csv","xlsx","xls"], key="fv_ocr_f")
+    if calc_ibnr or calc_ra:
+        claims_file = st.file_uploader("Claims Triangle (Loss_Date, Report_Date, Amount, LOB)", type=["csv","xlsx","xls"], key="fv_cl_f")
     if calc_ulae:
-        data_files['ulae'] = st.file_uploader("ULAE Reserves Data (Portfolio, OCR, IBNR)", type=["csv","xlsx","xls"], key="fv_ul_f")
-    if calc_npr:
-        data_files['reins'] = st.file_uploader("Reinsurer Data (Name, Rating, PD, Shares)", type=["csv","xlsx","xls"], key="fv_ri_f")
-        data_files['ceded'] = st.file_uploader("Ceded LIC Data (Portfolio, Ceded_IBNR, Ceded_OCR)", type=["csv","xlsx","xls"], key="fv_cd_f")
-    if calc_ra:
-        data_files['ra_claims'] = st.file_uploader("RA Claims Triangle (Loss_Date, Report_Date, Amount, LOB)", type=["csv","xlsx","xls"], key="fv_ra_f")
+        apportionment_file = st.file_uploader("ULAE Apportionment Key (Portfolio, Premiums_Received)", type=["csv","xlsx","xls"], key="fv_ap_f")
     
-    # ---- CASH FLOW DATA ----
-    st.markdown('<div class="section-container"><h3>Cash Flow Data</h3><p>Upload actual cash movements during the period.</p></div>', unsafe_allow_html=True)
-    cashflow_file = st.file_uploader("Cash Flow file (Portfolio, Premiums_Received, Paid_Claims_Gross, etc.)", type=["csv","xlsx","xls"], key="fv_cf")
+    st.markdown('<div class="section-container"><h3>Cash Flow Data</h3></div>', unsafe_allow_html=True)
+    cashflow_file = st.file_uploader("Cash Flows (Portfolio, Premiums_Received, Paid_Claims_Gross, etc.)", type=["csv","xlsx","xls"], key="fv_cf")
     
     # ---- PARAMETERS ----
-    st.markdown('<div class="section-container"><h3>Additional Parameters</h3></div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-container"><h3>Parameters</h3></div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1:
         if calc_ulae: ulae_ratio = st.number_input("ULAE Ratio (%)", 0.0, 20.0, 5.0, 0.5, key="fv_ur") / 100
+        else: ulae_ratio = 0.05
     with c2:
         if calc_ibnr: ibnr_grain = st.selectbox("IBNR Grain", ["Yearly","Half-Yearly","Quarterly","Monthly"], key="fv_ig")
+        else: ibnr_grain = "Yearly"
     with c3:
-        if calc_ra:
-            ra_cl = st.number_input("RA Confidence Level (%)", 50.0, 99.5, 90.0, 5.0, key="fv_rc") / 100
-            ra_iters = st.number_input("Bootstrap Iterations", 100, 10000, 1000, 100, key="fv_ri")
+        if calc_ra: ra_iters = st.number_input("Bootstrap Iterations", 100, 5000, 1000, 100, key="fv_ri")
+        else: ra_iters = 1000
     
     # ---- CALCULATE ----
     if st.button("Run Full IFRS 17 Valuation", key="fv_run", use_container_width=True):
-        if not selected_reserves:
-            st.warning("Please select at least one reserve to calculate.")
+        if not selected:
+            st.warning("Select at least one reserve.")
         else:
             with st.spinner("Running full IFRS 17 valuation..."):
-                # Placeholder: Build results
-                st.success("Valuation Complete!")
+                results = {}
+                portfolios = ["Motor","Property","Health","Engineering","Liability"]
                 
-                # ---- INCOME STATEMENT ----
-                st.markdown("## IFRS 17 Income Statement")
+                # ---- UPR ----
+                if calc_upr and upr_file is not None:
+                    df_upr = pd.read_csv(upr_file) if upr_file.name.endswith('.csv') else pd.read_excel(upr_file)
+                    df_upr.columns = df_upr.columns.astype(str).str.strip()
+                    df_upr['Start_Date'] = pd.to_datetime(df_upr.iloc[:,0], errors='coerce')
+                    df_upr['End_Date'] = pd.to_datetime(df_upr.iloc[:,1], errors='coerce')
+                    df_upr['LOB'] = df_upr.iloc[:,2]
+                    df_upr['Premium'] = pd.to_numeric(df_upr.iloc[:,3], errors='coerce')
+                    val_date = pd.to_datetime(report_date)
+                    df_upr = df_upr.dropna(subset=['Start_Date','End_Date'])
+                    df_upr = df_upr[df_upr['End_Date'] > df_upr['Start_Date']]
+                    df_upr['Duration'] = (df_upr['End_Date'] - df_upr['Start_Date']).dt.days
+                    df_upr['Remaining'] = (df_upr['End_Date'] - val_date).dt.days
+                    df_upr['Unearned'] = np.where(val_date < df_upr['Start_Date'], 1,
+                        np.where(val_date > df_upr['End_Date'], 0,
+                        df_upr['Remaining'] / df_upr['Duration']))
+                    df_upr['UPR'] = df_upr['Unearned'] * df_upr['Premium']
+                    upr_result = df_upr.groupby('LOB')['UPR'].sum().reset_index()
+                    upr_result.columns = ['Portfolio','Closing_UPR']
+                    results['UPR'] = upr_result
+                    st.success(f"UPR calculated: {upr_result['Closing_UPR'].sum():,.2f}")
+                
+                # ---- OCR ----
+                if calc_ocr and ocr_file is not None:
+                    df_ocr = pd.read_csv(ocr_file) if ocr_file.name.endswith('.csv') else pd.read_excel(ocr_file)
+                    df_ocr.columns = df_ocr.columns.astype(str).str.strip()
+                    df_ocr['LOB'] = df_ocr.iloc[:,0]
+                    df_ocr['Reserve'] = pd.to_numeric(df_ocr.iloc[:,2], errors='coerce')
+                    ocr_result = df_ocr.groupby('LOB')['Reserve'].sum().reset_index()
+                    ocr_result.columns = ['Portfolio','Closing_OCR']
+                    results['OCR'] = ocr_result
+                    st.success(f"OCR calculated: {ocr_result['Closing_OCR'].sum():,.2f}")
+                
+                # ---- IBNR (BCL) ----
+                if calc_ibnr and claims_file is not None:
+                    df_cl = pd.read_csv(claims_file) if claims_file.name.endswith('.csv') else pd.read_excel(claims_file)
+                    df_cl.columns = df_cl.columns.astype(str).str.strip()
+                    df_cl['Loss_Date'] = pd.to_datetime(df_cl.iloc[:,0], errors='coerce')
+                    df_cl['Report_Date'] = pd.to_datetime(df_cl.iloc[:,1], errors='coerce')
+                    df_cl['Amount'] = pd.to_numeric(df_cl.iloc[:,2], errors='coerce')
+                    df_cl['LOB'] = df_cl.iloc[:,3]
+                    df_cl = df_cl.dropna(subset=['Loss_Date','Report_Date'])
+                    
+                    from_dt = pd.to_datetime('2020-01-01')
+                    to_dt = pd.to_datetime('2025-12-31')
+                    df_cl = df_cl[(df_cl['Loss_Date']>=from_dt)&(df_cl['Loss_Date']<=to_dt)]
+                    n_periods = to_dt.year - from_dt.year + 1
+                    
+                    ibnr_rows = []
+                    for lob in portfolios:
+                        lob_data = df_cl[df_cl['LOB']==lob].copy()
+                        if len(lob_data)==0: continue
+                        lob_data['AP'] = lob_data['Loss_Date'].apply(lambda d: d.year - from_dt.year)
+                        lob_data['DP'] = lob_data.apply(lambda r: max(0, min(r['Report_Date'].year - r['Loss_Date'].year, n_periods-1)), axis=1)
+                        pivot = lob_data.pivot_table(index='AP', columns='DP', values='Amount', aggfunc='sum')
+                        for ap in range(n_periods):
+                            if ap not in pivot.index: pivot.loc[ap] = np.nan
+                        for dp in range(n_periods):
+                            if dp not in pivot.columns: pivot[dp] = np.nan
+                        inc = pivot.sort_index()[sorted(pivot.columns)].astype(float)
+                        for ap in inc.index:
+                            for dp in inc.columns:
+                                if ap+dp >= n_periods: inc.loc[ap, dp] = np.nan
+                        cum = inc.copy()
+                        for ap in inc.index:
+                            has_obs = any(pd.notna(inc.loc[ap, dp]) for dp in inc.columns if ap+dp<n_periods)
+                            if not has_obs: continue
+                            running = 0.0
+                            for dp in sorted(inc.columns):
+                                if ap+dp<n_periods:
+                                    v = inc.loc[ap, dp]; running += v if pd.notna(v) else 0.0; cum.loc[ap, dp] = running
+                        wc = cum.fillna(0)
+                        n_ay, n_dp = wc.shape
+                        factors = []
+                        for j in range(n_dp-1):
+                            num, den = 0.0, 0.0
+                            for i in range(n_ay):
+                                if i+j+1<n_ay:
+                                    c = wc.iloc[i,j]; n = wc.iloc[i,j+1]
+                                    if c>0: num+=n; den+=c
+                            factors.append(num/den if den>0 else 1.0)
+                        completed = wc.copy().astype(float)
+                        for i in range(n_ay):
+                            last_obs = -1
+                            for j in range(n_dp-1,-1,-1):
+                                if i+j<n_ay: last_obs=j; break
+                            if last_obs<0: continue
+                            for j in range(last_obs, n_dp-1):
+                                if j<len(factors):
+                                    prev = completed.iloc[i,j]; completed.iloc[i,j+1] = prev*factors[j] if prev>0 else 0.0
+                        ibnr_total = 0.0
+                        for i in range(n_ay):
+                            last_obs = -1
+                            for j in range(n_dp-1,-1,-1):
+                                if i+j<n_ay: last_obs=j; break
+                            if last_obs>=0:
+                                cur = wc.iloc[i,last_obs]; ult = completed.iloc[i,n_dp-1]
+                                ibnr_total += max(ult-cur, 0.0)
+                        ibnr_rows.append({'Portfolio':lob,'Closing_IBNR':ibnr_total})
+                    ibnr_result = pd.DataFrame(ibnr_rows)
+                    results['IBNR'] = ibnr_result
+                    st.success(f"IBNR calculated: {ibnr_result['Closing_IBNR'].sum():,.2f}")
+                
+                # ---- ULAE (auto from OCR + IBNR) ----
+                if calc_ulae and 'OCR' in results and 'IBNR' in results:
+                    reserves_df = results['OCR'].merge(results['IBNR'], on='Portfolio')
+                    reserves_df['ULAE_Base'] = 0.5 * reserves_df['Closing_OCR'] + reserves_df['Closing_IBNR']
+                    
+                    if apportionment_file is not None:
+                        app_df = pd.read_csv(apportionment_file) if apportionment_file.name.endswith('.csv') else pd.read_excel(apportionment_file)
+                        app_df.columns = app_df.columns.astype(str).str.strip()
+                        app_df['Portfolio'] = app_df.iloc[:,0]
+                        app_df['Amount'] = pd.to_numeric(app_df.iloc[:,1], errors='coerce')
+                        total_amt = app_df['Amount'].sum()
+                        app_df['Pct'] = app_df['Amount'] / total_amt if total_amt > 0 else 0
+                        total_base = reserves_df['ULAE_Base'].sum()
+                        total_ulae = total_base * ulae_ratio
+                        reserves_df = reserves_df.merge(app_df[['Portfolio','Pct']], on='Portfolio', how='left')
+                        reserves_df['Pct'] = reserves_df['Pct'].fillna(0)
+                        reserves_df['Closing_ULAE'] = total_ulae * reserves_df['Pct']
+                    else:
+                        reserves_df['Closing_ULAE'] = reserves_df['ULAE_Base'] * ulae_ratio
+                    
+                    results['ULAE'] = reserves_df[['Portfolio','Closing_ULAE']]
+                    st.success(f"ULAE calculated: {reserves_df['Closing_ULAE'].sum():,.2f}")
+                
+                # ---- RA (Bootstrap @ 90%) ----
+                if calc_ra and claims_file is not None:
+                    ra_rows = []
+                    for lob in portfolios:
+                        lob_data = df_cl[df_cl['LOB']==lob].copy()
+                        if len(lob_data)==0: continue
+                        lob_data['AP'] = lob_data['Loss_Date'].apply(lambda d: d.year - from_dt.year)
+                        lob_data['DP'] = lob_data.apply(lambda r: max(0, min(r['Report_Date'].year - r['Loss_Date'].year, n_periods-1)), axis=1)
+                        pivot = lob_data.pivot_table(index='AP', columns='DP', values='Amount', aggfunc='sum')
+                        for ap in range(n_periods):
+                            if ap not in pivot.index: pivot.loc[ap] = np.nan
+                        for dp in range(n_periods):
+                            if dp not in pivot.columns: pivot[dp] = np.nan
+                        inc = pivot.sort_index()[sorted(pivot.columns)].astype(float)
+                        obs_mask = pd.DataFrame(False, index=inc.index, columns=inc.columns)
+                        for ap in inc.index:
+                            for dp in inc.columns:
+                                if ap+dp < n_periods: obs_mask.loc[ap, dp] = pd.notna(inc.loc[ap, dp])
+                        for ap in inc.index:
+                            for dp in inc.columns:
+                                if ap+dp >= n_periods: inc.loc[ap, dp] = np.nan
+                        cum = inc.copy()
+                        for ap in inc.index:
+                            has_obs = any(pd.notna(inc.loc[ap, dp]) for dp in inc.columns if ap+dp<n_periods)
+                            if not has_obs: continue
+                            running = 0.0
+                            for dp in sorted(inc.columns):
+                                if ap+dp<n_periods:
+                                    v = inc.loc[ap, dp]; running += v if pd.notna(v) else 0.0; cum.loc[ap, dp] = running
+                        wc = cum.fillna(0)
+                        n_ay, n_dp = wc.shape
+                        factors = []
+                        for j in range(n_dp-1):
+                            num, den = 0.0, 0.0
+                            for i in range(n_ay):
+                                if i+j+1<n_ay:
+                                    c = wc.iloc[i,j]; n = wc.iloc[i,j+1]
+                                    if c>0: num+=n; den+=c
+                            factors.append(num/den if den>0 else 1.0)
+                        completed_det = wc.copy().astype(float)
+                        for i in range(n_ay):
+                            last_obs=-1
+                            for j in range(n_dp-1,-1,-1):
+                                if i+j<n_ay: last_obs=j; break
+                            if last_obs<0: continue
+                            for j in range(last_obs,n_dp-1):
+                                if j<len(factors):
+                                    prev=completed_det.iloc[i,j]; completed_det.iloc[i,j+1]=prev*factors[j] if prev>0 else 0.0
+                        fitted_inc = completed_det.copy()
+                        for i in range(n_ay):
+                            for j in range(n_dp-1,0,-1): fitted_inc.iloc[i,j] = completed_det.iloc[i,j] - completed_det.iloc[i,j-1]
+                        residuals_list = []
+                        for i in range(n_ay):
+                            for j in range(n_dp):
+                                if i+j<n_ay and obs_mask.iloc[i,j]:
+                                    actual = (wc.iloc[i,j]-wc.iloc[i,j-1]) if j>0 else wc.iloc[i,j]
+                                    fitted = fitted_inc.iloc[i,j]
+                                    resid = (actual-fitted)/np.sqrt(abs(fitted)) if fitted>0 else 0.0
+                                    residuals_list.append(resid)
+                        residuals = np.array(residuals_list)
+                        n_obs = len(residuals); n_params = n_dp-1; dof = max(n_obs-n_params,1)
+                        phi_raw = np.sum(residuals**2)/dof
+                        phi = max(phi_raw, 0.01)
+                        ibnr_samples = []
+                        for iteration in range(min(ra_iters, 200)):
+                            sampled = np.random.choice(residuals, size=n_obs, replace=True)
+                            pseudo_inc = fitted_inc.copy().astype(float); idx = 0
+                            for i in range(n_ay):
+                                for j in range(n_dp):
+                                    if i+j<n_ay and obs_mask.iloc[i,j]:
+                                        fv = fitted_inc.iloc[i,j]
+                                        pv = fv + sampled[idx]*np.sqrt(max(abs(fv),0.001))
+                                        pseudo_inc.iloc[i,j] = max(pv,0.0); idx += 1
+                            pseudo_cum = pseudo_inc.cumsum(axis=1)
+                            pf = []
+                            for j in range(n_dp-1):
+                                num, den = 0.0, 0.0
+                                for i in range(n_ay):
+                                    if i+j+1<n_ay:
+                                        c = pseudo_cum.iloc[i,j]; n = pseudo_cum.iloc[i,j+1]
+                                        if c>0: num+=n; den+=c
+                                pf.append(num/den if den>0 else 1.0)
+                            pc = pseudo_cum.copy().astype(float)
+                            for i in range(n_ay):
+                                last_obs=-1
+                                for j in range(n_dp-1,-1,-1):
+                                    if i+j<n_ay: last_obs=j; break
+                                if last_obs<0: continue
+                                for j in range(last_obs,n_dp-1):
+                                    if j<len(pf):
+                                        prev=pc.iloc[i,j]; pc.iloc[i,j+1]=prev*pf[j] if prev>0 else 0.0
+                            if phi>1e-10:
+                                proc_inc = pc.copy()
+                                for i in range(n_ay):
+                                    for j in range(n_dp-1,0,-1): proc_inc.iloc[i,j] = pc.iloc[i,j] - pc.iloc[i,j-1]
+                                for i in range(n_ay):
+                                    for j in range(n_dp):
+                                        is_future = (i+j>=n_ay) or (not obs_mask.iloc[i,j])
+                                        if is_future:
+                                            mv = proc_inc.iloc[i,j]
+                                            if pd.notna(mv) and mv>0: proc_inc.iloc[i,j] = max(np.random.gamma(mv/phi, phi), 0.0)
+                                            else: proc_inc.iloc[i,j] = 0.0
+                                pc = proc_inc.copy()
+                                for i in range(n_ay):
+                                    running=0.0
+                                    for j in range(n_dp):
+                                        v=proc_inc.iloc[i,j]; running+=v if pd.notna(v) and v>0 else 0.0; pc.iloc[i,j]=running
+                            ibnr_val = 0.0
+                            for i in range(n_ay):
+                                last_obs=-1
+                                for j in range(n_dp-1,-1,-1):
+                                    if i+j<n_ay and obs_mask.iloc[i,j]: last_obs=j; break
+                                if last_obs>=0:
+                                    cur = pseudo_cum.iloc[i,last_obs]; ult = pc.iloc[i,n_dp-1]
+                                    ibnr_val += max(ult-cur,0.0)
+                            ibnr_samples.append(ibnr_val)
+                        ibnr_arr = np.array(ibnr_samples)
+                        cl_ibnr = 0.0
+                        for i in range(n_ay):
+                            last_obs=-1
+                            for j in range(n_dp-1,-1,-1):
+                                if i+j<n_ay: last_obs=j; break
+                            if last_obs>=0:
+                                cur=wc.iloc[i,last_obs]; ult=completed_det.iloc[i,n_dp-1]
+                                cl_ibnr += max(ult-cur,0.0)
+                        ra_90 = max(np.percentile(ibnr_arr, 90) - cl_ibnr, 0.0)
+                        ra_rows.append({'Portfolio':lob,'Closing_RA':ra_90})
+                    ra_result = pd.DataFrame(ra_rows)
+                    results['RA'] = ra_result
+                    st.success(f"RA (Bootstrap @90%) calculated: {ra_result['Closing_RA'].sum():,.2f}")
+                
+                # ---- BUILD INCOME STATEMENT & ROLLFORWARD ----
+                st.markdown("---")
+                st.markdown("## IFRS 17 Results")
+                
+                # Get closing reserves
+                cl_upr = results['UPR'].set_index('Portfolio')['Closing_UPR'].to_dict() if 'UPR' in results else {}
+                cl_ocr = results['OCR'].set_index('Portfolio')['Closing_OCR'].to_dict() if 'OCR' in results else {}
+                cl_ibnr = results['IBNR'].set_index('Portfolio')['Closing_IBNR'].to_dict() if 'IBNR' in results else {}
+                cl_ulae = results['ULAE'].set_index('Portfolio')['Closing_ULAE'].to_dict() if 'ULAE' in results else {}
+                cl_ra = results['RA'].set_index('Portfolio')['Closing_RA'].to_dict() if 'RA' in results else {}
+                
+                # Opening balances
+                op_upr = {}; op_ocr = {}; op_ibnr = {}; op_ulae = {}; op_ra = {}
+                if opening_file is not None:
+                    op_df = pd.read_csv(opening_file) if opening_file.name.endswith('.csv') else pd.read_excel(opening_file)
+                    op_df.columns = op_df.columns.astype(str).str.strip()
+                    for _, row in op_df.iterrows():
+                        p = str(row.iloc[0])
+                        op_upr[p] = abs(pd.to_numeric(row.iloc[1], errors='coerce') or 0) * (-1 if pd.to_numeric(row.iloc[1], errors='coerce') < 0 else 1) if len(row)>1 else 0
+                        op_ocr[p] = pd.to_numeric(row.iloc[3], errors='coerce') or 0 if len(row)>3 else 0
+                        op_ibnr[p] = pd.to_numeric(row.iloc[4], errors='coerce') or 0 if len(row)>4 else 0
+                        op_ulae[p] = pd.to_numeric(row.iloc[5], errors='coerce') or 0 if len(row)>5 else 0
+                        op_ra[p] = pd.to_numeric(row.iloc[7], errors='coerce') or 0 if len(row)>7 else 0
+                
+                # Cash flows
+                cf_prem = {}; cf_paid = {}; cf_acq = {}; cf_maint = {}
+                if cashflow_file is not None:
+                    cf_df = pd.read_csv(cashflow_file) if cashflow_file.name.endswith('.csv') else pd.read_excel(cashflow_file)
+                    cf_df.columns = cf_df.columns.astype(str).str.strip()
+                    for _, row in cf_df.iterrows():
+                        p = str(row.iloc[0])
+                        cf_prem[p] = pd.to_numeric(row.iloc[1], errors='coerce') or 0
+                        cf_paid[p] = pd.to_numeric(row.iloc[2], errors='coerce') or 0
+                        cf_acq[p] = pd.to_numeric(row.iloc[5], errors='coerce') or 0
+                        cf_maint[p] = pd.to_numeric(row.iloc[6], errors='coerce') or 0
+                
+                # Totals
+                tot_op_upr = sum(op_upr.values())
+                tot_cl_upr = sum(cl_upr.values())
+                tot_op_ocr = sum(op_ocr.values())
+                tot_cl_ocr = sum(cl_ocr.values())
+                tot_op_ibnr = sum(op_ibnr.values())
+                tot_cl_ibnr = sum(cl_ibnr.values())
+                tot_op_ulae = sum(op_ulae.values())
+                tot_cl_ulae = sum(cl_ulae.values())
+                tot_op_ra = sum(op_ra.values())
+                tot_cl_ra = sum(cl_ra.values())
+                tot_cf_prem = sum(cf_prem.values())
+                tot_cf_paid = sum(cf_paid.values())
+                tot_cf_acq = sum(cf_acq.values())
+                tot_cf_maint = sum(cf_maint.values())
+                
+                # Insurance Revenue
+                insurance_revenue = tot_op_upr + tot_cf_prem - tot_cl_upr
+                incurred_claims = tot_cf_paid + tot_cl_ocr + tot_cl_ibnr - tot_op_ocr - tot_op_ibnr
+                
+                # Income Statement
+                st.subheader("IFRS 17 Income Statement")
                 income_data = {
                     "Line Item": [
-                        "Insurance revenue", "",
-                        "Insurance service expenses", "",
+                        "Insurance revenue", "Insurance service expenses",
                         "  Incurred claims and insurance contracts expenses",
-                        "  Insurance contract acquisition cash flows", "",
-                        "Insurance service results before reinsurance contracts held", "",
-                        "Net expenses / (income) from reinsurance contracts held", "",
-                        "  Allocation of reinsurance premiums",
-                        "  Amounts recoverable from reinsurers for incurred claims", "",
-                        "Insurance Service Result", "",
-                        "Insurance Finance Result", "",
-                        "  Finance income/expense from contracts issued",
-                        "  Finance income and expense from reinsurance contracts held", "",
-                        "Profit before tax",
-                        "Tax",
-                        "Profit After Tax", "",
-                        "Other comprehensive income (net of tax)", "",
-                        "  Finance income and expense from contracts issued",
-                        "  Finance income and expense from reinsurance contracts held", "",
-                        "Total comprehensive income for the year"
+                        "  Insurance contract acquisition cash flows",
+                        "  ULAE", "Insurance service result",
+                        "Insurance Finance Result", "Profit before tax"
                     ],
                     "Current Period": [
-                        "14,265,041.78", "",
-                        "(8,176,844.40)", "",
-                        "(7,016,630.31)",
-                        "(1,160,214.08)", "",
-                        "6,088,197.39", "",
-                        "(1,598,148.58)", "",
-                        "(1,682,085.68)",
-                        "83,937.09", "",
-                        "4,490,048.80", "",
-                        "0.00", "",
-                        "0.00",
-                        "0.00", "",
-                        "4,490,048.80",
-                        "0.00",
-                        "4,490,048.80", "",
-                        "0.00", "",
-                        "0.00",
-                        "0.00", "",
-                        "4,490,048.80"
+                        f"{insurance_revenue:,.2f}", f"{(incurred_claims + tot_cf_acq + tot_cl_ulae):,.2f}",
+                        f"{incurred_claims:,.2f}", f"{tot_cf_acq:,.2f}", f"{tot_cl_ulae:,.2f}",
+                        f"{insurance_revenue - incurred_claims - tot_cf_acq - tot_cl_ulae:,.2f}",
+                        "0.00", f"{insurance_revenue - incurred_claims - tot_cf_acq - tot_cl_ulae:,.2f}"
                     ]
                 }
-                income_df = pd.DataFrame(income_data)
-                st.dataframe(income_df, use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(income_data), use_container_width=True, hide_index=True)
                 
-                # ---- LIABILITY ROLLFORWARD ----
-                st.markdown("## Liability Rollforward")
+                # Rollforward
+                st.subheader("Liability Rollforward")
                 roll_data = {
-                    "": [
-                        "Opening Balance", "",
-                        "Cash Inflows - Premiums Received",
-                        "Insurance Revenue", "",
-                        "Insurance Service Expenses",
-                        "  Paid Claims net of recoveries",
-                        "  Maintenance Expenses Allocated",
-                        "  Change in outstanding claims + IBNR",
-                        "  Change in Loss Component - New loss arising",
-                        "  Change in Risk Adjustment",
-                        "  Amortised Deferred Acquisition Costs", "",
-                        "Investment Component Payments",
-                        "Insurance Finance Expenses",
-                        "Cash Outflows - Claims, commissions and expenses paid",
-                        "Outstanding balances transferred to LIC", "",
-                        "Closing Balance"
+                    "": ["Opening Balance","Premiums Received","Insurance Revenue",
+                         "Incurred Claims + Expenses","Paid Claims","Acquisition Costs","ULAE",
+                         "Change in RA","Closing Balance"],
+                    "LRC (UPR)": [
+                        f"{tot_op_upr:,.2f}", f"{tot_cf_prem:,.2f}", f"{-insurance_revenue:,.2f}",
+                        "-","-","-","-","-",f"{tot_cl_upr:,.2f}"
                     ],
-                    "LRC Non-Onerous": [
-                        "(694,042.17)", "",
-                        "13,568,271.13",
-                        "(14,265,041.78)", "",
-                        "1,160,214.08",
-                        "-",
-                        "-",
-                        "-",
-                        "-",
-                        "-",
-                        "1,160,214.08", "",
-                        "0.00",
-                        "0.00",
-                        "(1,373,262.05)",
-                        "215,776.46", "",
-                        "(694,042.17)"
+                    "LIC (OCR+IBNR+ULAE)": [
+                        f"{tot_op_ocr+tot_op_ibnr+tot_op_ulae:,.2f}", "-", "-",
+                        f"{incurred_claims:,.2f}", f"{-tot_cf_paid:,.2f}", "-", f"{tot_cl_ulae:,.2f}",
+                        "-", f"{tot_cl_ocr+tot_cl_ibnr+tot_cl_ulae:,.2f}"
                     ],
-                    "LRC Loss Comp": [
-                        "21,935.06", "",
-                        "-",
-                        "-", "",
-                        "21,935.06",
-                        "-",
-                        "-",
-                        "-",
-                        "21,935.06",
-                        "-",
-                        "-", "",
-                        "0.00",
-                        "0.00",
-                        "-",
-                        "0.00", "",
-                        "21,935.06"
-                    ],
-                    "LIC RA": [
-                        "11.84", "",
-                        "-",
-                        "-", "",
-                        "(1,342.68)",
-                        "-",
-                        "-",
-                        "-",
-                        "-",
-                        "(1,342.68)",
-                        "-", "",
-                        "0.00",
-                        "0.00",
-                        "-",
-                        "-", "",
-                        "(1,330.84)"
-                    ],
-                    "LIC PVFCF": [
-                        "(320,572.37)", "",
-                        "-",
-                        "-", "",
-                        "6,996,037.93",
-                        "2,401,073.14",
-                        "4,611,197.37",
-                        "(16,232.58)",
-                        "-",
-                        "-",
-                        "-", "",
-                        "0.00",
-                        "0.00",
-                        "(7,012,270.51)",
-                        "(215,776.46)", "",
-                        "(320,572.37)"
+                    "LIC (RA)": [
+                        f"{tot_op_ra:,.2f}", "-", "-", "-", "-", "-", "-",
+                        f"{tot_cl_ra - tot_op_ra:,.2f}", f"{tot_cl_ra:,.2f}"
                     ],
                     "ICL": [
-                        "(992,667.63)", "",
-                        "13,568,271.13",
-                        "(14,265,041.78)", "",
-                        "8,176,844.40",
-                        "2,401,073.14",
-                        "4,611,197.37",
-                        "(16,232.58)",
-                        "21,935.06",
-                        "(1,342.68)",
-                        "1,160,214.08", "",
-                        "0.00",
-                        "0.00",
-                        "(8,385,532.57)",
-                        "0.00", "",
-                        "(992,667.63)"
+                        f"{tot_op_upr+tot_op_ocr+tot_op_ibnr+tot_op_ulae+tot_op_ra:,.2f}",
+                        f"{tot_cf_prem:,.2f}", f"{-insurance_revenue:,.2f}",
+                        f"{incurred_claims:,.2f}", f"{-tot_cf_paid:,.2f}", f"{-tot_cf_acq:,.2f}",
+                        f"{tot_cl_ulae:,.2f}", f"{tot_cl_ra - tot_op_ra:,.2f}",
+                        f"{tot_cl_upr+tot_cl_ocr+tot_cl_ibnr+tot_cl_ulae+tot_cl_ra:,.2f}"
                     ]
                 }
-                roll_df = pd.DataFrame(roll_data)
-                st.dataframe(roll_df, use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(roll_data), use_container_width=True, hide_index=True)
                 
                 # Export
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as w:
-                    # Metadata sheet
                     meta_df = pd.DataFrame([
                         {"Field":"Creation","Value":st.session_state.report_metadata.get('creation_time','')},
                         {"Field":"Created By","Value":st.session_state.report_metadata.get('created_by','')},
@@ -398,8 +580,8 @@ def render_full_valuation():
                         {"Field":"Valuation Date","Value":st.session_state.report_metadata.get('valuation_date','')},
                     ])
                     meta_df.to_excel(w, index=False, sheet_name='Report_Metadata')
-                    income_df.to_excel(w, index=False, sheet_name='Income_Statement')
-                    roll_df.to_excel(w, index=False, sheet_name='Liability_Rollforward')
+                    pd.DataFrame(income_data).to_excel(w, index=False, sheet_name='Income_Statement')
+                    pd.DataFrame(roll_data).to_excel(w, index=False, sheet_name='Liability_Rollforward')
                 output.seek(0)
                 sc = re.sub(r'[\\/*?:"<>|]',"",report_client).strip() or "Client"
                 st.download_button("Download IFRS 17 Report", data=output, file_name=f"{sc}_IFRS17_Report_{report_date}.xlsx", key="fv_dl")
@@ -1097,7 +1279,7 @@ def render_bf_calculator():
     back_button('ibnr_menu',['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
 
 # =============================================================================
-#  ULAE
+#  ULAE (Standalone)
 # =============================================================================
 
 def render_ulae_calculator():

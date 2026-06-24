@@ -917,6 +917,358 @@ def render_mack_calculator():
     show_breadcrumb(); st.markdown("## Mack"); st.info("Pending"); back_button('risk_adjustment',['Home','LIC','Risk Adjustment'])
 
 def render_bootstrap_calculator():
+    # =============================================================================
+#  BOOTSTRAP CALCULATOR — COMPLETE
+# =============================================================================
+
+def render_bootstrap_calculator():
+    """Bootstrap — Stochastic Reserving Calculator (England & Verrall 2002)."""
+    show_breadcrumb()
+    st.markdown('<div class="hero"><h1>Bootstrap Chain Ladder IBNR Calculator</h1><p>England & Verrall (2002) stochastic reserving. Generates distribution of IBNR outcomes with process variance. Optional inflation and discounting.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-container">', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1: client_name = st.text_input("Client Name", value="Client", key="bs_cn").strip()
+    with col2: pass
+
+    # Period & Grain
+    st.markdown('<div class="section-container"><h3>IBNR Period & Grain</h3></div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    with c1: from_date = st.date_input("From Date", value=date(2021,1,1), key="bs_fd")
+    with c2: to_date = st.date_input("To Date", value=date(2025,12,31), key="bs_td")
+    with c3: grain = st.selectbox("Grain", ["Yearly","Half-Yearly","Quarterly","Monthly"], key="bs_gr")
+    grain_map = {"Yearly":"Y","Half-Yearly":"H","Quarterly":"Q","Monthly":"M"}
+    grain_key = grain_map[grain]
+    from_date_dt = pd.to_datetime(from_date); to_date_dt = pd.to_datetime(to_date)
+    st.info(f"Period: {from_date} to {to_date} | Grain: {grain}")
+
+    # Claims file
+    st.markdown('<div class="section-container"><h3>Upload Claims Data</h3></div>', unsafe_allow_html=True)
+    claims_file = st.file_uploader("Choose claims file", type=["csv","xlsx","xls"], key="bs_cf")
+    
+    if claims_file is not None:
+        try:
+            ext = claims_file.name.split('.')[-1].lower()
+            if ext == 'csv':
+                try: df = pd.read_csv(claims_file, encoding='utf-8')
+                except: claims_file.seek(0); df = pd.read_csv(claims_file, encoding='cp1252')
+            else: df = pd.read_excel(claims_file)
+            unnamed = [c for c in df.columns if c.startswith('Unnamed:')]
+            if unnamed: df = df.drop(columns=unnamed)
+            st.markdown("#### Preview"); st.dataframe(df.head())
+            
+            st.markdown("### Map Columns")
+            all_cols = df.columns.tolist()
+            c1, c2 = st.columns(2)
+            with c1: loss_col = st.selectbox("Loss Date column", [""]+all_cols, key="bs_lc")
+            with c2: report_col = st.selectbox("Report Date column", [""]+all_cols, key="bs_rc")
+            if not loss_col or not report_col: st.warning("Select both date columns."); st.stop()
+            
+            remaining = [c for c in all_cols if c not in [loss_col, report_col]]
+            grouping_cols = st.multiselect("Grouping columns (optional)", remaining, key="bs_gc")
+            
+            num_cands = [c for c in df.columns if c not in [loss_col,report_col]+grouping_cols and pd.api.types.is_numeric_dtype(df[c])]
+            if not num_cands: st.error("No numeric columns."); st.stop()
+            amount_cols = st.multiselect("Claim Amount columns", num_cands, key="bs_ac")
+            if not amount_cols: st.warning("Select at least one amount column."); st.stop()
+
+            # Process data
+            df[loss_col] = pd.to_datetime(df[loss_col], errors='coerce')
+            df[report_col] = pd.to_datetime(df[report_col], errors='coerce')
+            df = df.dropna(subset=[loss_col, report_col])
+            df_filtered = df[(df[loss_col]>=from_date_dt)&(df[loss_col]<=to_date_dt)].copy()
+            if df_filtered.empty: st.error("No data in selected period."); st.stop()
+            st.success(f"{len(df_filtered)} records")
+
+            # Calculate periods
+            if grain_key == 'Y': n_periods = to_date_dt.year - from_date_dt.year + 1
+            elif grain_key == 'M': n_periods = (to_date_dt.year-from_date_dt.year)*12 + (to_date_dt.month-from_date_dt.month) + 1
+            elif grain_key == 'Q': n_periods = (to_date_dt.year-from_date_dt.year)*4 + ((to_date_dt.month-1)//3-(from_date_dt.month-1)//3) + 1
+            else: n_periods = (to_date_dt.year-from_date_dt.year)*2 + ((to_date_dt.month-1)//6-(from_date_dt.month-1)//6) + 1
+
+            # Options
+            st.markdown("---"); st.markdown("### Options")
+            c1, c2 = st.columns(2)
+            with c1:
+                use_discounting = st.checkbox("Apply Discounting", key="bs_ud")
+                spot_rates = None; flat_rate = None
+                if use_discounting:
+                    use_curve = st.checkbox("Use Yield Curve", key="bs_uc")
+                    if use_curve:
+                        yc_file = st.file_uploader("Yield Curve file", type=["csv","xlsx","xls"], key="bs_yc")
+                        if yc_file is not None:
+                            yc_ext = yc_file.name.split('.')[-1].lower()
+                            yc_df = pd.read_csv(yc_file) if yc_ext=='csv' else pd.read_excel(yc_file)
+                            yc_df = yc_df.dropna()
+                            if len(yc_df.columns)>=2:
+                                maturities = pd.to_numeric(yc_df.iloc[:,0], errors='coerce').values
+                                rates = pd.to_numeric(yc_df.iloc[:,1], errors='coerce').values/100
+                                ppy = periods_per_year(grain_key)
+                                pm = np.arange(1,61)/ppy
+                                if len(maturities)>=4: f_int = interpolate.CubicSpline(maturities, rates, extrapolate=True)
+                                else: f_int = interpolate.interp1d(maturities, rates, kind='linear', fill_value='extrapolate')
+                                spot_rates = np.clip(f_int(pm), 0, 1.0)
+                    else: flat_rate = st.number_input("Annual discount rate (%)", 0.0, 50.0, 5.0, key="bs_fr")/100
+            with c2:
+                use_inflation = st.checkbox("Apply Inflation Adjustment", key="bs_ui")
+                cum_inflation = None; per_period_rates = None
+                if use_inflation:
+                    inf_file = st.file_uploader("Inflation file", type=["csv","xlsx","xls"], key="bs_if")
+                    if inf_file is not None:
+                        inf_ext = inf_file.name.split('.')[-1].lower()
+                        inf_df = pd.read_csv(inf_file) if inf_ext=='csv' else pd.read_excel(inf_file)
+                        inf_df = inf_df.dropna()
+                        if len(inf_df.columns)>=2:
+                            inf_rates = pd.to_numeric(inf_df.iloc[:,1], errors='coerce').fillna(0)/100
+                            ppy_tgt = periods_per_year(grain_key)
+                            x_inf = np.arange(len(inf_rates))
+                            x_tgt = np.arange(int(x_inf[-1])+1) if len(inf_rates)>0 else np.arange(n_periods)
+                            if len(inf_rates)>=4: f_int = interpolate.CubicSpline(x_inf, inf_rates, extrapolate=True)
+                            else: f_int = interpolate.interp1d(x_inf, inf_rates, kind='linear', fill_value='extrapolate')
+                            annual_tgt = np.clip(f_int(x_tgt), -0.5, 2.0)
+                            per_period_rates = (1+annual_tgt)**(1/ppy_tgt)-1
+                            cum_inflation = np.cumprod(1+per_period_rates)
+
+            # Bootstrap Parameters
+            st.markdown("---"); st.markdown('<div class="section-container"><h3>Bootstrap Parameters</h3></div>', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns(3)
+            with c1: n_iterations = st.number_input("Iterations", 100, 100000, 1000, 100, key="bs_ni")
+            with c2: add_process = st.checkbox("Add Process Variance", value=True, key="bs_ap")
+            with c3:
+                set_seed = st.checkbox("Set Random Seed", key="bs_ss")
+                seed = st.number_input("Seed", 0, 99999, 42, key="bs_sd") if set_seed else None
+
+            # Confidence Levels
+            st.markdown('<div class="section-container"><h3>Confidence Levels & RA Base</h3></div>', unsafe_allow_html=True)
+            cl_input = st.text_input("Confidence levels (comma-separated, e.g. 75,90,95)", "75,90,95", key="bs_cl")
+            confidence_levels = [int(x.strip()) for x in cl_input.split(",") if x.strip().isdigit()]
+            if not confidence_levels: confidence_levels = [75, 90, 95]
+            ra_base = st.radio("RA Base:", ["Chain Ladder IBNR", "Bootstrap Mean"], key="bs_rb")
+            ra_base_key = "cl" if ra_base.startswith("Chain") else "bootstrap"
+
+            # ---- RUN BOOTSTRAP ----
+            if st.button("Run Bootstrap", key="bs_run", use_container_width=True):
+                if grouping_cols: groups = df_filtered[grouping_cols].drop_duplicates().to_dict("records")
+                else: groups = [{"__all__":"All Data"}]
+                
+                all_summary = []; all_boot_data = {}
+                
+                for grp in groups:
+                    if "__all__" in grp: gdf = df_filtered.copy(); glabel = "All Data"
+                    else:
+                        mask = pd.Series(True, index=df_filtered.index)
+                        for col, val in grp.items(): mask &= (df_filtered[col]==val)
+                        gdf = df_filtered[mask].copy(); glabel = " | ".join(str(v) for v in grp.values())
+                    
+                    for ac in amount_cols:
+                        label = f"{glabel} | {ac}"
+                        st.markdown(f"**{label}**")
+                        
+                        # Build triangles
+                        gdf["__ap"] = gdf[loss_col].apply(lambda d: (d.year-from_date_dt.year) if grain_key=='Y' else ((d.year-from_date_dt.year)*12+(d.month-from_date_dt.month)))
+                        gdf["__dp"] = gdf.apply(lambda r: max(0, min((r[report_col].year-r[loss_col].year) if grain_key=='Y' else ((r[report_col].year-r[loss_col].year)*12+(r[report_col].month-r[loss_col].month)), n_periods-1)), axis=1)
+                        gdf = gdf[(gdf["__ap"]>=0)&(gdf["__ap"]<n_periods)]
+                        
+                        pivot = gdf.pivot_table(index="__ap", columns="__dp", values=ac, aggfunc="sum")
+                        for ap in range(n_periods):
+                            if ap not in pivot.index: pivot.loc[ap] = np.nan
+                        for dp in range(n_periods):
+                            if dp not in pivot.columns: pivot[dp] = np.nan
+                        inc = pivot.sort_index()[sorted(pivot.columns)].astype(float)
+                        
+                        obs_mask = pd.DataFrame(False, index=inc.index, columns=inc.columns)
+                        for ap in inc.index:
+                            for dp in inc.columns:
+                                if ap+dp < n_periods: obs_mask.loc[ap, dp] = pd.notna(inc.loc[ap, dp])
+                        for ap in inc.index:
+                            for dp in inc.columns:
+                                if ap+dp >= n_periods: inc.loc[ap, dp] = np.nan
+                        
+                        cum = inc.copy()
+                        for ap in inc.index:
+                            has_obs = any(pd.notna(inc.loc[ap, dp]) for dp in inc.columns if ap+dp<n_periods)
+                            if not has_obs: cum.loc[ap]=np.nan; continue
+                            running = 0.0
+                            for dp in sorted(inc.columns):
+                                if ap+dp<n_periods: v=inc.loc[ap,dp]; running+=v if pd.notna(v) else 0.0; cum.loc[ap,dp]=running
+                                else: cum.loc[ap,dp]=np.nan
+                        
+                        working_cum = cum.fillna(0)
+                        if use_inflation and cum_inflation is not None:
+                            valuation_idx = n_periods-1
+                            if len(cum_inflation)<=valuation_idx: cum_inflation=np.append(cum_inflation,[cum_inflation[-1]]*(valuation_idx-len(cum_inflation)+1))
+                            inf_val = cum_inflation[valuation_idx]
+                            real_inc = inc.copy().astype(float)
+                            for ap in inc.index:
+                                for dp in inc.columns:
+                                    if ap+dp>=n_periods: continue
+                                    val = inc.loc[ap, dp]
+                                    if pd.isna(val): continue
+                                    t = ap+dp; inf_t = cum_inflation[min(t, len(cum_inflation)-1)]
+                                    real_inc.loc[ap, dp] = val*(inf_val/inf_t) if inf_t>0 else val
+                            working_cum = real_inc.cumsum(axis=1).fillna(0)
+                        
+                        # Fit CL
+                        n_ay, n_dp = working_cum.shape
+                        factors = []
+                        for j in range(n_dp-1):
+                            num, den = 0.0, 0.0
+                            for i in range(n_ay):
+                                if i+j+1<n_ay:
+                                    c = working_cum.iloc[i,j]; n = working_cum.iloc[i,j+1]
+                                    if c>0: num+=n; den+=c
+                            factors.append(num/den if den>0 else 1.0)
+                        
+                        completed_det = working_cum.copy().astype(float)
+                        for i in range(n_ay):
+                            last_obs=-1
+                            for j in range(n_dp-1,-1,-1):
+                                if i+j<n_ay: last_obs=j; break
+                            if last_obs<0: continue
+                            for j in range(last_obs,n_dp-1):
+                                if j<len(factors):
+                                    prev=completed_det.iloc[i,j]; completed_det.iloc[i,j+1]=prev*factors[j] if prev>0 else 0.0
+                        
+                        fitted_inc = completed_det.copy()
+                        for i in range(n_ay):
+                            for j in range(n_dp-1,0,-1): fitted_inc.iloc[i,j] = completed_det.iloc[i,j] - completed_det.iloc[i,j-1]
+                        
+                        # Residuals
+                        residuals_list = []
+                        for i in range(n_ay):
+                            for j in range(n_dp):
+                                if i+j<n_ay and obs_mask.iloc[i,j]:
+                                    actual = (working_cum.iloc[i,j]-working_cum.iloc[i,j-1]) if j>0 else working_cum.iloc[i,j]
+                                    fitted = fitted_inc.iloc[i,j]
+                                    resid = (actual-fitted)/np.sqrt(abs(fitted)) if fitted>0 else 0.0
+                                    residuals_list.append(resid)
+                        
+                        residuals = np.array(residuals_list)
+                        n_obs = len(residuals); n_params = n_dp-1; dof = max(n_obs-n_params,1)
+                        phi_raw = np.sum(residuals**2)/dof
+                        phi = max(phi_raw, 0.01)
+                        
+                        # Bootstrap
+                        ibnr_samples = []
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
+                        for iteration in range(n_iterations):
+                            sampled = np.random.choice(residuals, size=n_obs, replace=True)
+                            pseudo_inc = fitted_inc.copy().astype(float); idx = 0
+                            for i in range(n_ay):
+                                for j in range(n_dp):
+                                    if i+j<n_ay and obs_mask.iloc[i,j]:
+                                        fv = fitted_inc.iloc[i,j]
+                                        pv = fv + sampled[idx]*np.sqrt(max(abs(fv),0.001))
+                                        pseudo_inc.iloc[i,j] = max(pv,0.0); idx += 1
+                            pseudo_cum = pseudo_inc.cumsum(axis=1)
+                            
+                            pf = []
+                            for j in range(n_dp-1):
+                                num, den = 0.0, 0.0
+                                for i in range(n_ay):
+                                    if i+j+1<n_ay:
+                                        c = pseudo_cum.iloc[i,j]; n = pseudo_cum.iloc[i,j+1]
+                                        if c>0: num+=n; den+=c
+                                pf.append(num/den if den>0 else 1.0)
+                            
+                            pc = pseudo_cum.copy().astype(float)
+                            for i in range(n_ay):
+                                last_obs=-1
+                                for j in range(n_dp-1,-1,-1):
+                                    if i+j<n_ay: last_obs=j; break
+                                if last_obs<0: continue
+                                for j in range(last_obs,n_dp-1):
+                                    if j<len(pf):
+                                        prev=pc.iloc[i,j]; pc.iloc[i,j+1]=prev*pf[j] if prev>0 else 0.0
+                            
+                            if add_process and phi>1e-10:
+                                proc_inc = pc.copy()
+                                for i in range(n_ay):
+                                    for j in range(n_dp-1,0,-1): proc_inc.iloc[i,j] = pc.iloc[i,j] - pc.iloc[i,j-1]
+                                for i in range(n_ay):
+                                    for j in range(n_dp):
+                                        is_future = (i+j>=n_ay) or (not obs_mask.iloc[i,j])
+                                        if is_future:
+                                            mv = proc_inc.iloc[i,j]
+                                            if pd.notna(mv) and mv>0:
+                                                proc_inc.iloc[i,j] = max(np.random.gamma(mv/phi, phi), 0.0)
+                                            else: proc_inc.iloc[i,j] = 0.0
+                                pc = proc_inc.copy()
+                                for i in range(n_ay):
+                                    running=0.0
+                                    for j in range(n_dp):
+                                        v=proc_inc.iloc[i,j]; running+=v if pd.notna(v) and v>0 else 0.0; pc.iloc[i,j]=running
+                            
+                            ibnr_val = 0.0
+                            for i in range(n_ay):
+                                last_obs=-1
+                                for j in range(n_dp-1,-1,-1):
+                                    if i+j<n_ay and obs_mask.iloc[i,j]: last_obs=j; break
+                                if last_obs>=0:
+                                    cur = pseudo_cum.iloc[i,last_obs]; ult = pc.iloc[i,n_dp-1]
+                                    ibnr_val += max(ult-cur,0.0)
+                            ibnr_samples.append(ibnr_val)
+                            
+                            if (iteration+1)%max(1,n_iterations//20)==0:
+                                progress_bar.progress((iteration+1)/n_iterations)
+                                status_text.text(f"Iteration {iteration+1}/{n_iterations}")
+                        
+                        progress_bar.empty(); status_text.empty()
+                        ibnr_arr = np.array(ibnr_samples)
+                        
+                        # CL IBNR
+                        cl_ibnr = 0.0
+                        for i in range(n_ay):
+                            last_obs=-1
+                            for j in range(n_dp-1,-1,-1):
+                                if i+j<n_ay: last_obs=j; break
+                            if last_obs>=0:
+                                cur=working_cum.iloc[i,last_obs]; ult=completed_det.iloc[i,n_dp-1]
+                                cl_ibnr += max(ult-cur,0.0)
+                        
+                        # Display results
+                        st.metric("CL IBNR", f"{cl_ibnr:,.2f}")
+                        st.metric("Bootstrap Mean", f"{np.mean(ibnr_arr):,.2f}")
+                        st.metric("Bootstrap Std Dev", f"{np.std(ibnr_arr,ddof=1):,.2f}")
+                        st.metric("CV", f"{np.std(ibnr_arr,ddof=1)/np.mean(ibnr_arr):.2%}" if np.mean(ibnr_arr)>0 else "N/A")
+                        st.metric("Scale (phi)", f"{phi:.4f}")
+                        
+                        st.markdown("**Simulated IBNRs at Confidence Levels:**")
+                        pctl_data = {}
+                        for cl in confidence_levels:
+                            pv = np.percentile(ibnr_arr, cl)
+                            pctl_data[f"{cl}th"] = f"{pv:,.2f}"
+                            st.write(f"  {cl}th Percentile: {pv:,.2f}")
+                        
+                        st.markdown("**Risk Adjustments:**")
+                        base = cl_ibnr if ra_base_key=="cl" else np.mean(ibnr_arr)
+                        for cl in confidence_levels:
+                            pv = np.percentile(ibnr_arr, cl)
+                            ra = max(pv-base, 0.0)
+                            st.write(f"  {cl}%: Base={base:,.2f}, Pctl={pv:,.2f}, RA={ra:,.2f}")
+                        
+                        all_summary.append({"Group":glabel,"Amount":ac,"CL_IBNR":cl_ibnr,"BS_Mean":np.mean(ibnr_arr),"BS_Std":np.std(ibnr_arr,ddof=1),"CV":np.std(ibnr_arr,ddof=1)/np.mean(ibnr_arr) if np.mean(ibnr_arr)>0 else 0,"Phi":phi,**{f"Pctl_{cl}":np.percentile(ibnr_arr,cl) for cl in confidence_levels},**{f"RA_{cl}":max(np.percentile(ibnr_arr,cl)-base,0) for cl in confidence_levels}})
+                        all_boot_data[label] = ibnr_arr
+                
+                if all_summary:
+                    st.markdown("### Overall Summary")
+                    st.dataframe(pd.DataFrame(all_summary), use_container_width=True)
+                    
+                    output = BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as w:
+                        pd.DataFrame(all_summary).to_excel(w, index=False, sheet_name='Bootstrap_Summary')
+                        for label, samples in all_boot_data.items():
+                            safe_lbl = re.sub(r'[\\/*?:\[\]]',"",label)[:25]
+                            pd.DataFrame({"Iteration":range(1,len(samples)+1),"Simulated_IBNR":samples}).to_excel(w, index=False, sheet_name=f"Samples_{safe_lbl}")
+                    output.seek(0)
+                    sc = re.sub(r'[\\/*?:"<>|]',"",client_name).strip() or "Client"
+                    st.download_button("Download Excel", data=output, file_name=f"{sc}_Bootstrap_IBNR.xlsx", key="bs_dl")
+
+        except Exception as e: st.error(f"Error: {e}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     show_breadcrumb(); st.markdown("## Bootstrap"); st.info("Pending"); back_button('risk_adjustment',['Home','LIC','Risk Adjustment'])
 
 def render_var_calculator():

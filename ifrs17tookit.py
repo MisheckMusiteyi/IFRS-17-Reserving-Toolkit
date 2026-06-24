@@ -41,19 +41,18 @@ st.markdown("""
     .breadcrumb { background-color: #F0F0F0; padding: 0.5rem 1rem; border-radius: 5px; margin-bottom: 1rem; font-size: 0.9rem; border-left: 3px solid #4A90D9; }
     .breadcrumb span { color: #4A90D9; font-weight: bold; }
     .stFileUploader { border: 2px dashed #4A90D9 !important; border-radius: 10px !important; padding: 1rem !important; }
-    .data-check-info { background-color: #E3F2FD; border: 2px solid #4A90D9; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
-    .data-check-warning { background-color: #FFF3E0; border: 2px solid #FF9800; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
-    .data-check-error { background-color: #FFEBEE; border: 2px solid #F44336; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
-    .data-check-success { background-color: #E8F5E9; border: 2px solid #4CAF50; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
     .dataframe { border: 1px solid #4A90D9 !important; border-radius: 8px !important; overflow: hidden !important; }
     .stSelectbox [data-baseweb="select"], .stMultiSelect [data-baseweb="select"] { border: 1px solid #4A90D9 !important; border-radius: 4px !important; }
     .required-container { background-color: #F9F9F9; border: 2px solid #4A90D9; border-radius: 10px; padding: 1rem; text-align: center; min-height: 120px; margin-bottom: 1rem; }
     .required-container h3 { color: #4A90D9; font-size: 1.2rem; font-weight: bold; }
-    .grouping-container { background-color: #F9F9F9; border: 2px solid #4A90D9; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
-    .grouping-container h3 { color: #4A90D9; font-size: 1.2rem; font-weight: bold; }
     .main-container { max-width: 1400px; margin: 2rem auto; padding: 0 2rem; }
     .report-meta { background-color: #F0F4F8; border: 2px solid #4A90D9; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; font-size: 0.85rem; }
     .report-meta td { padding: 2px 8px; }
+    .rollforward-table { font-size: 0.85rem; }
+    .rollforward-table th { background-color: #4A90D9; color: #FFFFFF; padding: 6px; text-align: center; }
+    .rollforward-table td { padding: 4px 8px; border: 1px solid #ddd; }
+    .rollforward-table .lob-header { background-color: #E3F2FD; font-weight: bold; }
+    .rollforward-table .total-row { background-color: #000000; color: #FFFFFF; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -117,7 +116,7 @@ def render_home():
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown('<div class="card"><h3>Full IFRS 17 Valuation</h3><p>Complete valuation with Income Statement & Liability Rollforward</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="card"><h3>Full IFRS 17 Valuation</h3><p>Complete valuation with Income Statement & Liability Rollforward per LOB</p></div>', unsafe_allow_html=True)
         if st.button("Full Valuation", key="nav_home_full"): navigate_to('full_valuation', ['Home','Full Valuation']); st.rerun()
     with col2:
         st.markdown('<div class="card"><h3>Individual Calculators</h3><p>LRC | LIC | Risk Adjustment — standalone tools</p></div>', unsafe_allow_html=True)
@@ -127,7 +126,7 @@ def render_home():
         if st.button("Go to LIC", key="nav_home_lic"): navigate_to('lic', ['Home','LIC']); st.rerun()
 
 def render_full_valuation():
-    """Full IFRS 17 Valuation Mode with column mapping."""
+    """Full IFRS 17 Valuation Mode with per-LOB rollforwards."""
     show_breadcrumb()
     st.markdown('<div class="hero"><h1>Full IFRS 17 Valuation</h1><p>Complete valuation with Income Statement & Liability Rollforward per Line of Business</p></div>', unsafe_allow_html=True)
     st.markdown('<div class="main-container">', unsafe_allow_html=True)
@@ -185,7 +184,6 @@ def render_full_valuation():
     upr_data = None; ocr_data = None; claims_data = None
     apportionment_data = None; cashflow_data = None; opening_data = None
     
-    # UPR Data
     if calc_upr:
         st.markdown("#### UPR Data (Premium Register)")
         upr_file = st.file_uploader("Upload UPR file", type=["csv","xlsx","xls"], key="fv_upr_f")
@@ -199,7 +197,6 @@ def render_full_valuation():
                 st.success("UPR columns mapped.")
             except Exception as e: st.error(f"Error: {e}")
     
-    # OCR Data
     if calc_ocr:
         st.markdown("#### OCR Data (Case Estimates)")
         ocr_file = st.file_uploader("Upload OCR file", type=["csv","xlsx","xls"], key="fv_ocr_f")
@@ -213,7 +210,6 @@ def render_full_valuation():
                 st.success("OCR columns mapped.")
             except Exception as e: st.error(f"Error: {e}")
     
-    # Claims Triangle Data
     if calc_ibnr or calc_ra:
         st.markdown("#### Claims Triangle Data")
         claims_file = st.file_uploader("Upload Claims file", type=["csv","xlsx","xls"], key="fv_cl_f")
@@ -227,7 +223,6 @@ def render_full_valuation():
                 st.success("Claims columns mapped.")
             except Exception as e: st.error(f"Error: {e}")
     
-    # ULAE Apportionment
     if calc_ulae:
         st.markdown("#### ULAE Apportionment Key")
         app_file = st.file_uploader("Upload Apportionment file", type=["csv","xlsx","xls"], key="fv_ap_f")
@@ -241,7 +236,6 @@ def render_full_valuation():
                 st.success("Apportionment columns mapped.")
             except Exception as e: st.error(f"Error: {e}")
     
-    # Cash Flow Data
     st.markdown("#### Cash Flow Data (for Income Statement)")
     cf_file = st.file_uploader("Upload Cash Flow file", type=["csv","xlsx","xls"], key="fv_cf")
     if cf_file is not None:
@@ -254,7 +248,6 @@ def render_full_valuation():
             st.success("Cash flow columns mapped.")
         except Exception as e: st.error(f"Error: {e}")
     
-    # Opening Balances
     st.markdown("#### Opening Balances")
     op_file = st.file_uploader("Upload Opening Balances file", type=["csv","xlsx","xls"], key="fv_ob")
     if op_file is not None:
@@ -292,7 +285,7 @@ def render_full_valuation():
                 to_dt = pd.to_datetime('2025-12-31')
                 n_periods_bcl = to_dt.year - from_dt.year + 1
                 
-                # Determine portfolios from available data
+                # Determine portfolios
                 portfolios = []
                 if upr_data is not None and 'Line_of_Business' in upr_data.columns:
                     portfolios = sorted(upr_data['Line_of_Business'].dropna().unique().tolist())
@@ -562,93 +555,194 @@ def render_full_valuation():
                 st.markdown("---")
                 st.markdown("## IFRS 17 Valuation Results")
                 
-                # Build per-portfolio summary
+                # Build per-portfolio closing reserves
+                closing_reserves = {}
+                for p in portfolios:
+                    closing_reserves[p] = {
+                        'UPR': results['UPR'][results['UPR']['Portfolio']==p]['Closing_UPR'].sum() if 'UPR' in results else 0,
+                        'OCR': results['OCR'][results['OCR']['Portfolio']==p]['Closing_OCR'].sum() if 'OCR' in results else 0,
+                        'IBNR': results['IBNR'][results['IBNR']['Portfolio']==p]['Closing_IBNR'].sum() if 'IBNR' in results else 0,
+                        'ULAE': results['ULAE'][results['ULAE']['Portfolio']==p]['Closing_ULAE'].sum() if 'ULAE' in results else 0,
+                        'RA': results['RA'][results['RA']['Portfolio']==p]['Closing_RA'].sum() if 'RA' in results else 0,
+                    }
+                
+                # Opening balances per portfolio
+                op_reserves = {}
+                if opening_data is not None:
+                    for _, row in opening_data.iterrows():
+                        p = str(row['Portfolio'])
+                        op_reserves[p] = {
+                            'UPR': abs(pd.to_numeric(row.get('Opening_LRC_UPR',0), errors='coerce') or 0),
+                            'OCR': pd.to_numeric(row.get('Opening_LIC_OCR',0), errors='coerce') or 0,
+                            'IBNR': pd.to_numeric(row.get('Opening_LIC_IBNR',0), errors='coerce') or 0,
+                            'ULAE': pd.to_numeric(row.get('Opening_LIC_ULAE',0), errors='coerce') or 0,
+                            'RA': pd.to_numeric(row.get('Opening_LIC_RA',0), errors='coerce') or 0,
+                        }
+                
+                # Cash flows per portfolio
+                cf_reserves = {}
+                if cashflow_data is not None:
+                    for _, row in cashflow_data.iterrows():
+                        p = str(row['Portfolio'])
+                        cf_reserves[p] = {
+                            'Premiums_Received': pd.to_numeric(row.get('Premiums_Received',0), errors='coerce') or 0,
+                            'Paid_Claims': pd.to_numeric(row.get('Paid_Claims_Gross',0), errors='coerce') or 0,
+                            'Acquisition_Costs': pd.to_numeric(row.get('Acquisition_Costs',0), errors='coerce') or 0,
+                            'Maintenance_Expenses': pd.to_numeric(row.get('Maintenance_Expenses',0), errors='coerce') or 0,
+                        }
+                
+                # ---- LIABILITY SUMMARY ----
+                st.subheader("Liability Summary by Portfolio")
                 summary_rows = []
                 for p in portfolios:
+                    cl = closing_reserves.get(p, {})
                     row = {'Portfolio': p}
-                    if 'UPR' in results:
-                        upr_val = results['UPR'][results['UPR']['Portfolio']==p]['Closing_UPR'].sum()
-                        row['UPR (LRC)'] = upr_val
-                    if 'OCR' in results:
-                        ocr_val = results['OCR'][results['OCR']['Portfolio']==p]['Closing_OCR'].sum()
-                        row['OCR (LIC)'] = ocr_val
-                    if 'IBNR' in results:
-                        ibnr_val = results['IBNR'][results['IBNR']['Portfolio']==p]['Closing_IBNR'].sum()
-                        row['IBNR (LIC)'] = ibnr_val
-                    if 'ULAE' in results:
-                        ulae_val = results['ULAE'][results['ULAE']['Portfolio']==p]['Closing_ULAE'].sum()
-                        row['ULAE (LIC)'] = ulae_val
-                    if 'RA' in results:
-                        ra_val = results['RA'][results['RA']['Portfolio']==p]['Closing_RA'].sum()
-                        row['RA (LIC)'] = ra_val
-                    row['Total LRC'] = row.get('UPR (LRC)', 0)
-                    row['Total LIC'] = row.get('OCR (LIC)', 0) + row.get('IBNR (LIC)', 0) + row.get('ULAE (LIC)', 0) + row.get('RA (LIC)', 0)
+                    row['UPR (LRC)'] = cl.get('UPR', 0)
+                    row['OCR (LIC)'] = cl.get('OCR', 0)
+                    row['IBNR (LIC)'] = cl.get('IBNR', 0)
+                    row['ULAE (LIC)'] = cl.get('ULAE', 0)
+                    row['RA (LIC)'] = cl.get('RA', 0)
+                    row['Total LRC'] = row['UPR (LRC)']
+                    row['Total LIC'] = row['OCR (LIC)'] + row['IBNR (LIC)'] + row['ULAE (LIC)'] + row['RA (LIC)']
                     row['ICL'] = row['Total LRC'] + row['Total LIC']
                     summary_rows.append(row)
                 
-                # Add TOTAL row
                 total_row = {'Portfolio': 'TOTAL'}
                 for key in summary_rows[0].keys():
                     if key != 'Portfolio':
                         total_row[key] = sum(r.get(key, 0) for r in summary_rows)
                 summary_rows.append(total_row)
-                
                 summary_df = pd.DataFrame(summary_rows)
-                
-                st.subheader("Liability Summary by Portfolio")
                 disp_summary = summary_df.copy()
                 for c in disp_summary.columns:
                     if c != 'Portfolio':
                         disp_summary[c] = disp_summary[c].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else "-")
                 st.dataframe(disp_summary, use_container_width=True, hide_index=True)
                 
-                # Opening balances
-                op_upr = {}; op_ocr = {}; op_ibnr = {}; op_ulae = {}; op_ra = {}
-                if opening_data is not None:
-                    for _, row in opening_data.iterrows():
-                        p = str(row['Portfolio'])
-                        op_upr[p] = abs(pd.to_numeric(row.get('Opening_LRC_UPR',0), errors='coerce') or 0)
-                        op_ocr[p] = pd.to_numeric(row.get('Opening_LIC_OCR',0), errors='coerce') or 0
-                        op_ibnr[p] = pd.to_numeric(row.get('Opening_LIC_IBNR',0), errors='coerce') or 0
-                        op_ulae[p] = pd.to_numeric(row.get('Opening_LIC_ULAE',0), errors='coerce') or 0
-                        op_ra[p] = pd.to_numeric(row.get('Opening_LIC_RA',0), errors='coerce') or 0
+                # ---- PER-PORTFOLIO ROLLFORWARDS ----
+                st.subheader("Liability Rollforward — by Line of Business")
                 
-                # Cash flows
-                cf_prem = {}; cf_paid = {}; cf_acq = {}; cf_maint = {}
-                if cashflow_data is not None:
-                    for _, row in cashflow_data.iterrows():
-                        p = str(row['Portfolio'])
-                        cf_prem[p] = pd.to_numeric(row.get('Premiums_Received',0), errors='coerce') or 0
-                        cf_paid[p] = pd.to_numeric(row.get('Paid_Claims_Gross',0), errors='coerce') or 0
-                        cf_acq[p] = pd.to_numeric(row.get('Acquisition_Costs',0), errors='coerce') or 0
-                        cf_maint[p] = pd.to_numeric(row.get('Maintenance_Expenses',0), errors='coerce') or 0
+                # Calculate insurance revenue per portfolio
+                ins_rev = {}
+                for p in portfolios:
+                    op_upr = op_reserves.get(p, {}).get('UPR', 0)
+                    cl_upr = closing_reserves.get(p, {}).get('UPR', 0)
+                    prem_rec = cf_reserves.get(p, {}).get('Premiums_Received', 0)
+                    ins_rev[p] = op_upr + prem_rec - cl_upr
                 
-                # Closing reserves
-                cl_upr = dict(zip(summary_df[summary_df['Portfolio']!='TOTAL']['Portfolio'], 
-                                  [results['UPR'][results['UPR']['Portfolio']==p]['Closing_UPR'].sum() for p in portfolios])) if 'UPR' in results else {}
-                cl_ocr = dict(zip(summary_df[summary_df['Portfolio']!='TOTAL']['Portfolio'],
-                                  [results['OCR'][results['OCR']['Portfolio']==p]['Closing_OCR'].sum() for p in portfolios])) if 'OCR' in results else {}
-                cl_ibnr = dict(zip(summary_df[summary_df['Portfolio']!='TOTAL']['Portfolio'],
-                                   [results['IBNR'][results['IBNR']['Portfolio']==p]['Closing_IBNR'].sum() for p in portfolios])) if 'IBNR' in results else {}
-                cl_ulae = dict(zip(summary_df[summary_df['Portfolio']!='TOTAL']['Portfolio'],
-                                   [results['ULAE'][results['ULAE']['Portfolio']==p]['Closing_ULAE'].sum() for p in portfolios])) if 'ULAE' in results else {}
-                cl_ra = dict(zip(summary_df[summary_df['Portfolio']!='TOTAL']['Portfolio'],
-                                 [results['RA'][results['RA']['Portfolio']==p]['Closing_RA'].sum() for p in portfolios])) if 'RA' in results else {}
+                for p in portfolios:
+                    op = op_reserves.get(p, {})
+                    cl = closing_reserves.get(p, {})
+                    cf = cf_reserves.get(p, {})
+                    
+                    op_upr = op.get('UPR', 0)
+                    cl_upr = cl.get('UPR', 0)
+                    op_ocr = op.get('OCR', 0)
+                    cl_ocr = cl.get('OCR', 0)
+                    op_ibnr = op.get('IBNR', 0)
+                    cl_ibnr = cl.get('IBNR', 0)
+                    op_ulae = op.get('ULAE', 0)
+                    cl_ulae = cl.get('ULAE', 0)
+                    op_ra = op.get('RA', 0)
+                    cl_ra = cl.get('RA', 0)
+                    
+                    prem_rec = cf.get('Premiums_Received', 0)
+                    paid = cf.get('Paid_Claims', 0)
+                    acq = cf.get('Acquisition_Costs', 0)
+                    maint = cf.get('Maintenance_Expenses', 0)
+                    
+                    ir = ins_rev.get(p, 0)
+                    incurred = paid + cl_ocr + cl_ibnr - op_ocr - op_ibnr
+                    
+                    op_icf = op_ocr + op_ibnr + op_ulae
+                    cl_icf = cl_ocr + cl_ibnr + cl_ulae
+                    op_icl = op_upr + op_icf + op_ra
+                    cl_icl = cl_upr + cl_icf + cl_ra
+                    
+                    st.markdown(f"**{p}**")
+                    roll_data = {
+                        "Line Item": [
+                            "Opening Balance", "Premiums Received", "Insurance Revenue",
+                            "Incurred Claims", "Paid Claims", "Acquisition Costs",
+                            "ULAE", "Maintenance Expenses", "Change in RA", "Closing Balance"
+                        ],
+                        "LRC (UPR)": [
+                            f"{op_upr:,.2f}", f"{prem_rec:,.2f}", f"{-ir:,.2f}",
+                            "-", "-", "-", "-", "-", "-", f"{cl_upr:,.2f}"
+                        ],
+                        "LIC (FCF)": [
+                            f"{op_icf:,.2f}", "-", "-",
+                            f"{incurred:,.2f}", f"{-paid:,.2f}", "-",
+                            f"{cl_ulae:,.2f}", f"{-maint:,.2f}", "-", f"{cl_icf:,.2f}"
+                        ],
+                        "LIC (RA)": [
+                            f"{op_ra:,.2f}", "-", "-", "-", "-", "-", "-", "-",
+                            f"{cl_ra - op_ra:,.2f}", f"{cl_ra:,.2f}"
+                        ],
+                        "ICL": [
+                            f"{op_icl:,.2f}", f"{prem_rec:,.2f}", f"{-ir:,.2f}",
+                            f"{incurred:,.2f}", f"{-paid:,.2f}", f"{-acq:,.2f}",
+                            f"{cl_ulae:,.2f}", f"{-maint:,.2f}",
+                            f"{cl_ra - op_ra:,.2f}", f"{cl_icl:,.2f}"
+                        ]
+                    }
+                    st.dataframe(pd.DataFrame(roll_data), use_container_width=True, hide_index=True)
+                    st.markdown("<br>", unsafe_allow_html=True)
                 
-                # Totals
-                T = lambda d: sum(d.values())
-                tot_op_upr = T(op_upr); tot_cl_upr = T(cl_upr)
-                tot_op_ocr = T(op_ocr); tot_cl_ocr = T(cl_ocr)
-                tot_op_ibnr = T(op_ibnr); tot_cl_ibnr = T(cl_ibnr)
-                tot_op_ulae = T(op_ulae); tot_cl_ulae = T(cl_ulae)
-                tot_op_ra = T(op_ra); tot_cl_ra = T(cl_ra)
-                tot_cf_prem = T(cf_prem); tot_cf_paid = T(cf_paid)
-                tot_cf_acq = T(cf_acq); tot_cf_maint = T(cf_maint)
+                # ---- CONSOLIDATED ROLLFORWARD ----
+                st.subheader("Consolidated Liability Rollforward")
+                T = lambda d: sum(v for v in d.values())
+                tot_op_upr = T({p: op_reserves.get(p,{}).get('UPR',0) for p in portfolios})
+                tot_cl_upr = T({p: closing_reserves.get(p,{}).get('UPR',0) for p in portfolios})
+                tot_op_ocr = T({p: op_reserves.get(p,{}).get('OCR',0) for p in portfolios})
+                tot_cl_ocr = T({p: closing_reserves.get(p,{}).get('OCR',0) for p in portfolios})
+                tot_op_ibnr = T({p: op_reserves.get(p,{}).get('IBNR',0) for p in portfolios})
+                tot_cl_ibnr = T({p: closing_reserves.get(p,{}).get('IBNR',0) for p in portfolios})
+                tot_op_ulae = T({p: op_reserves.get(p,{}).get('ULAE',0) for p in portfolios})
+                tot_cl_ulae = T({p: closing_reserves.get(p,{}).get('ULAE',0) for p in portfolios})
+                tot_op_ra = T({p: op_reserves.get(p,{}).get('RA',0) for p in portfolios})
+                tot_cl_ra = T({p: closing_reserves.get(p,{}).get('RA',0) for p in portfolios})
+                tot_prem = T({p: cf_reserves.get(p,{}).get('Premiums_Received',0) for p in portfolios})
+                tot_paid = T({p: cf_reserves.get(p,{}).get('Paid_Claims',0) for p in portfolios})
+                tot_acq = T({p: cf_reserves.get(p,{}).get('Acquisition_Costs',0) for p in portfolios})
+                tot_maint = T({p: cf_reserves.get(p,{}).get('Maintenance_Expenses',0) for p in portfolios})
                 
-                insurance_revenue = tot_op_upr + tot_cf_prem - tot_cl_upr
-                incurred_claims = tot_cf_paid + tot_cl_ocr + tot_cl_ibnr - tot_op_ocr - tot_op_ibnr
+                tot_ir = tot_op_upr + tot_prem - tot_cl_upr
+                tot_incurred = tot_paid + tot_cl_ocr + tot_cl_ibnr - tot_op_ocr - tot_op_ibnr
+                tot_op_icf = tot_op_ocr + tot_op_ibnr + tot_op_ulae
+                tot_cl_icf = tot_cl_ocr + tot_cl_ibnr + tot_cl_ulae
+                tot_op_icl = tot_op_upr + tot_op_icf + tot_op_ra
+                tot_cl_icl = tot_cl_upr + tot_cl_icf + tot_cl_ra
                 
-                # Income Statement
+                consol_data = {
+                    "Line Item": [
+                        "Opening Balance", "Premiums Received", "Insurance Revenue",
+                        "Incurred Claims", "Paid Claims", "Acquisition Costs",
+                        "ULAE", "Maintenance Expenses", "Change in RA", "Closing Balance"
+                    ],
+                    "LRC (UPR)": [
+                        f"{tot_op_upr:,.2f}", f"{tot_prem:,.2f}", f"{-tot_ir:,.2f}",
+                        "-", "-", "-", "-", "-", "-", f"{tot_cl_upr:,.2f}"
+                    ],
+                    "LIC (FCF)": [
+                        f"{tot_op_icf:,.2f}", "-", "-",
+                        f"{tot_incurred:,.2f}", f"{-tot_paid:,.2f}", "-",
+                        f"{tot_cl_ulae:,.2f}", f"{-tot_maint:,.2f}", "-", f"{tot_cl_icf:,.2f}"
+                    ],
+                    "LIC (RA)": [
+                        f"{tot_op_ra:,.2f}", "-", "-", "-", "-", "-", "-", "-",
+                        f"{tot_cl_ra - tot_op_ra:,.2f}", f"{tot_cl_ra:,.2f}"
+                    ],
+                    "ICL": [
+                        f"{tot_op_icl:,.2f}", f"{tot_prem:,.2f}", f"{-tot_ir:,.2f}",
+                        f"{tot_incurred:,.2f}", f"{-tot_paid:,.2f}", f"{-tot_acq:,.2f}",
+                        f"{tot_cl_ulae:,.2f}", f"{-tot_maint:,.2f}",
+                        f"{tot_cl_ra - tot_op_ra:,.2f}", f"{tot_cl_icl:,.2f}"
+                    ]
+                }
+                st.dataframe(pd.DataFrame(consol_data), use_container_width=True, hide_index=True)
+                
+                # ---- INCOME STATEMENT ----
                 st.subheader("IFRS 17 Income Statement")
                 income_data = {
                     "Line Item": [
@@ -658,49 +752,18 @@ def render_full_valuation():
                         "Insurance Finance Result", "Profit before tax"
                     ],
                     "Amount": [
-                        f"{insurance_revenue:,.2f}",
-                        f"{(incurred_claims + tot_cf_acq + tot_cl_ulae + tot_cf_maint):,.2f}",
-                        f"{incurred_claims:,.2f}", f"{tot_cf_acq:,.2f}",
-                        f"{tot_cl_ulae:,.2f}", f"{tot_cf_maint:,.2f}",
-                        f"{insurance_revenue - incurred_claims - tot_cf_acq - tot_cl_ulae - tot_cf_maint:,.2f}",
+                        f"{tot_ir:,.2f}",
+                        f"{(tot_incurred + tot_acq + tot_cl_ulae + tot_maint):,.2f}",
+                        f"{tot_incurred:,.2f}", f"{tot_acq:,.2f}",
+                        f"{tot_cl_ulae:,.2f}", f"{tot_maint:,.2f}",
+                        f"{tot_ir - tot_incurred - tot_acq - tot_cl_ulae - tot_maint:,.2f}",
                         "0.00",
-                        f"{insurance_revenue - incurred_claims - tot_cf_acq - tot_cl_ulae - tot_cf_maint:,.2f}"
+                        f"{tot_ir - tot_incurred - tot_acq - tot_cl_ulae - tot_maint:,.2f}"
                     ]
                 }
                 st.dataframe(pd.DataFrame(income_data), use_container_width=True, hide_index=True)
                 
-                # Rollforward
-                st.subheader("Liability Rollforward")
-                roll_data = {
-                    "": ["Opening Balance","Premiums Received","Insurance Revenue",
-                         "Incurred Claims","Paid Claims","Acquisition Costs","ULAE",
-                         "Maintenance Expenses","Change in RA","Closing Balance"],
-                    "LRC (UPR)": [
-                        f"{tot_op_upr:,.2f}", f"{tot_cf_prem:,.2f}", f"{-insurance_revenue:,.2f}",
-                        "-","-","-","-","-","-",f"{tot_cl_upr:,.2f}"
-                    ],
-                    "LIC (FCF)": [
-                        f"{tot_op_ocr+tot_op_ibnr+tot_op_ulae:,.2f}", "-", "-",
-                        f"{incurred_claims:,.2f}", f"{-tot_cf_paid:,.2f}", "-",
-                        f"{tot_cl_ulae:,.2f}", f"{-tot_cf_maint:,.2f}", "-",
-                        f"{tot_cl_ocr+tot_cl_ibnr+tot_cl_ulae:,.2f}"
-                    ],
-                    "LIC (RA)": [
-                        f"{tot_op_ra:,.2f}", "-", "-", "-", "-", "-", "-", "-",
-                        f"{tot_cl_ra - tot_op_ra:,.2f}", f"{tot_cl_ra:,.2f}"
-                    ],
-                    "ICL": [
-                        f"{tot_op_upr+tot_op_ocr+tot_op_ibnr+tot_op_ulae+tot_op_ra:,.2f}",
-                        f"{tot_cf_prem:,.2f}", f"{-insurance_revenue:,.2f}",
-                        f"{incurred_claims:,.2f}", f"{-tot_cf_paid:,.2f}", f"{-tot_cf_acq:,.2f}",
-                        f"{tot_cl_ulae:,.2f}", f"{-tot_cf_maint:,.2f}",
-                        f"{tot_cl_ra - tot_op_ra:,.2f}",
-                        f"{tot_cl_upr+tot_cl_ocr+tot_cl_ibnr+tot_cl_ulae+tot_cl_ra:,.2f}"
-                    ]
-                }
-                st.dataframe(pd.DataFrame(roll_data), use_container_width=True, hide_index=True)
-                
-                # Export
+                # ---- EXPORT ----
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as w:
                     meta_df = pd.DataFrame([
@@ -714,7 +777,46 @@ def render_full_valuation():
                     meta_df.to_excel(w, index=False, sheet_name='Report_Metadata')
                     summary_df.to_excel(w, index=False, sheet_name='Liability_Summary')
                     pd.DataFrame(income_data).to_excel(w, index=False, sheet_name='Income_Statement')
-                    pd.DataFrame(roll_data).to_excel(w, index=False, sheet_name='Liability_Rollforward')
+                    pd.DataFrame(consol_data).to_excel(w, index=False, sheet_name='Consolidated_Rollforward')
+                    
+                    # Per-portfolio rollforwards
+                    for p in portfolios:
+                        op = op_reserves.get(p, {})
+                        cl = closing_reserves.get(p, {})
+                        cf = cf_reserves.get(p, {})
+                        
+                        op_upr = op.get('UPR', 0); cl_upr = cl.get('UPR', 0)
+                        op_ocr = op.get('OCR', 0); cl_ocr = cl.get('OCR', 0)
+                        op_ibnr = op.get('IBNR', 0); cl_ibnr = cl.get('IBNR', 0)
+                        op_ulae = op.get('ULAE', 0); cl_ulae = cl.get('ULAE', 0)
+                        op_ra = op.get('RA', 0); cl_ra = cl.get('RA', 0)
+                        
+                        prem_rec = cf.get('Premiums_Received', 0)
+                        paid = cf.get('Paid_Claims', 0)
+                        acq = cf.get('Acquisition_Costs', 0)
+                        maint = cf.get('Maintenance_Expenses', 0)
+                        
+                        ir = ins_rev.get(p, 0)
+                        incurred = paid + cl_ocr + cl_ibnr - op_ocr - op_ibnr
+                        op_icf = op_ocr + op_ibnr + op_ulae
+                        cl_icf = cl_ocr + cl_ibnr + cl_ulae
+                        op_icl = op_upr + op_icf + op_ra
+                        cl_icl = cl_upr + cl_icf + cl_ra
+                        
+                        pr_data = {
+                            "Line Item": [
+                                "Opening Balance", "Premiums Received", "Insurance Revenue",
+                                "Incurred Claims", "Paid Claims", "Acquisition Costs",
+                                "ULAE", "Maintenance Expenses", "Change in RA", "Closing Balance"
+                            ],
+                            "LRC (UPR)": [op_upr, prem_rec, -ir, 0, 0, 0, 0, 0, 0, cl_upr],
+                            "LIC (FCF)": [op_icf, 0, 0, incurred, -paid, 0, cl_ulae, -maint, 0, cl_icf],
+                            "LIC (RA)": [op_ra, 0, 0, 0, 0, 0, 0, 0, cl_ra-op_ra, cl_ra],
+                            "ICL": [op_icl, prem_rec, -ir, incurred, -paid, -acq, cl_ulae, -maint, cl_ra-op_ra, cl_icl]
+                        }
+                        safe_name = re.sub(r'[\\/*?:\[\]]', '', p)[:28]
+                        pd.DataFrame(pr_data).to_excel(w, index=False, sheet_name=f'RW_{safe_name}')
+                
                 output.seek(0)
                 sc = re.sub(r'[\\/*?:"<>|]',"",report_client).strip() or "Client"
                 st.download_button("Download IFRS 17 Report", data=output, file_name=f"{sc}_IFRS17_Report_{report_date}.xlsx", key="fv_dl")
@@ -723,7 +825,8 @@ def render_full_valuation():
     back_button('home', ['Home'])
 
 # =============================================================================
-#  ALL OTHER CALCULATORS (LRC, LIC, Individual) — unchanged from previous code
+#  ALL OTHER RENDER FUNCTIONS (LRC, LIC, Individual Calculators)
+#  Same as previous code — included for completeness
 # =============================================================================
 
 def render_lrc():
@@ -780,11 +883,6 @@ def render_risk_adjustment():
             st.markdown(f'<div class="card"><h3>{n}</h3></div>', unsafe_allow_html=True)
             if st.button("Open", key=f"nav_ra_{p}"): navigate_to(p, ['Home','LIC','Risk Adjustment',n]); st.rerun()
     back_button('lic', ['Home','LIC'])
-
-# =============================================================================
-#  INDIVIDUAL CALCULATORS (UPR, LossComp, OCR, IBNR%, BCL, CapeCod, BF, ULAE, NPR, Bootstrap)
-#  [Same as previous code — included by reference]
-# =============================================================================
 
 def render_upr_calculator():
     show_breadcrumb()

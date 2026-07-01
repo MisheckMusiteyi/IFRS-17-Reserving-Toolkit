@@ -3,7 +3,7 @@
 #  NEXT VANTAGE — COMPREHENSIVE ACTUARIAL TOOLKIT
 #  Premium Redesign: Deep Navy + Electric Blue + Frosted Glass
 #  Login gate + full IFRS 17 calculations
-#  INCLUDES: NEW Full IFRS 17 LRC (PAA) Mode AND Fully Restored Individual Calculators
+#  INCLUDES: NEW Full IFRS 17 LRC (PAA) Mode (Independent Branch)
 #  Run:  streamlit run app.py
 # =============================================================================
 
@@ -2121,17 +2121,17 @@ def render_upr_calculator():
             r1,r2=st.columns(2)
             with r1: start_date_col=st.selectbox("Start Date Column",[""]+all_columns,key="upr_sd")
             with r2: end_date_col=st.selectbox("End Date Column",[""]+all_columns,key="upr_ed")
-            if not start_date_col or not end_date_col: 
+            if not start_date_col or not end_date_col:
                 st.info("Please select Start and End Date columns to proceed.")
                 return  # Replaced st.stop() with return
             grouping_options=[c for c in all_columns if c not in [start_date_col,end_date_col]]
             grouping_cols=st.multiselect("Group by:",options=grouping_options,default=[grouping_options[0]] if grouping_options else [],key="upr_gc")
-            if not grouping_cols: 
+            if not grouping_cols:
                 st.info("Please select at least one Group By column.")
                 return  # Replaced st.stop() with return
             numeric_columns=[c for c in df.columns if c not in [start_date_col,end_date_col]+grouping_cols and pd.api.types.is_numeric_dtype(df[c])]
             selected_value_cols=st.multiselect("Numeric columns:",options=numeric_columns,default=numeric_columns[:min(4,len(numeric_columns))],key="upr_vc")
-            if not selected_value_cols: 
+            if not selected_value_cols:
                 st.info("Please select at least one Numeric column.")
                 return  # Replaced st.stop() with return
             df_check=df.rename(columns={start_date_col:'Start_Date',end_date_col:'End_Date'})
@@ -2183,12 +2183,12 @@ def render_ocr_calculator():
             if unnamed: df=df.drop(columns=unnamed)
             all_columns=df.columns.tolist()
             grouping_cols=st.multiselect("Group by:",options=all_columns,default=[all_columns[0]] if all_columns else [],key="ocr_gc")
-            if not grouping_cols: 
+            if not grouping_cols:
                 st.info("Please select at least one Group By column.")
                 return
             numeric_columns=[c for c in df.select_dtypes(include=[np.number]).columns if c not in grouping_cols]
             selected_value_cols=st.multiselect("Numeric columns:",options=numeric_columns,default=numeric_columns[:min(5,len(numeric_columns))],key="ocr_vc")
-            if not selected_value_cols: 
+            if not selected_value_cols:
                 st.info("Please select at least one Numeric column.")
                 return
             df_processed=df[grouping_cols+selected_value_cols].copy()

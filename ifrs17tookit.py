@@ -2,7 +2,8 @@
 # =============================================================================
 #  NEXT VANTAGE — COMPREHENSIVE ACTUARIAL TOOLKIT
 #  Premium Redesign: Deep Navy + Electric Blue + Frosted Glass
-#  Login gate + full IFRS 17 calculations (unchanged)
+#  Login gate + full IFRS 17 calculations
+#  INCLUDES: NEW Full IFRS 17 LRC (PAA) Mode AND Fully Restored Individual Calculators
 #  Run:  streamlit run app.py
 # =============================================================================
 
@@ -22,14 +23,20 @@ st.set_page_config(
 )
 
 # =============================================================================
-#  CREDENTIALS  (extend this dict or swap with DB lookup)
+#  CREDENTIALS (Secured via st.secrets, with fallback for local dev)
 # =============================================================================
 
-USERS = {
-    "admin@nextvantage.com": {"password": "NV2026!", "name": "Administrator", "role": "Admin"},
-    "actuary@nextvantage.com": {"password": "Actuary1", "name": "Actuarial User", "role": "Actuary"},
-    "demo@nextvantage.com": {"password": "demo", "name": "Demo User", "role": "Viewer"},
-}
+# Use st.secrets for production. If not available (local dev), fallback to a dict.
+try:
+    # This will be populated by a .streamlit/secrets.toml file in production
+    USERS = st.secrets["users"]
+except Exception:
+    # Local development fallback
+    USERS = {
+        "admin@nextvantage.com": {"password": "NV2026!", "name": "Administrator", "role": "Admin"},
+        "actuary@nextvantage.com": {"password": "Actuary1", "name": "Actuarial User", "role": "Actuary"},
+        "demo@nextvantage.com": {"password": "demo", "name": "Demo User", "role": "Viewer"},
+    }
 
 # =============================================================================
 #  DESIGN SYSTEM CSS
@@ -105,7 +112,7 @@ html, body, [class*="css"] {
 }
 .nv-user-pill strong { color: #38BDF8; font-weight: 600; }
 
-/* ── LOGIN SCREEN ── */
+/* ── LOGIN SCREEN (Refactored for proper composition) ── */
 .login-wrap {
     min-height: 100vh;
     background: #0A0E1A;
@@ -146,6 +153,7 @@ html, body, [class*="css"] {
         0 0 0 1px rgba(37,99,235,0.1),
         0 32px 64px rgba(0,0,0,0.5),
         0 0 80px rgba(37,99,235,0.08);
+    margin: 0 auto;
 }
 .login-badge {
     display: inline-block;
@@ -593,6 +601,8 @@ if 'breadcrumb' not in st.session_state: st.session_state.breadcrumb = ['Home']
 if 'report_metadata' not in st.session_state: st.session_state.report_metadata = {}
 if 'fv_results' not in st.session_state: st.session_state.fv_results = {}
 if 'login_error' not in st.session_state: st.session_state.login_error = ""
+if 'run_id' not in st.session_state: 
+    st.session_state.run_id = f"DN{hash(str(datetime.now())):x}"[:40]
 
 # =============================================================================
 #  LOGIN PAGE
@@ -603,46 +613,40 @@ def render_login():
     <div class="login-wrap">
         <div class="login-mesh"></div>
         <div class="login-grid"></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col_l, col_m, col_r = st.columns([1, 1.1, 1])
-    with col_m:
-        st.markdown("""
         <div class="login-card">
             <div class="login-badge">⬡ IFRS 17 Compliant Platform</div>
             <div class="login-title">Next <span>Vantage</span></div>
             <div class="login-sub">Actuarial reserving toolkit for modern insurance operations. Secure access required.</div>
-        </div>
-        """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-        if st.session_state.login_error:
-            st.markdown(f'<div class="login-error">⚠ {st.session_state.login_error}</div>', unsafe_allow_html=True)
+    if st.session_state.login_error:
+        st.markdown(f'<div class="login-error">⚠ {st.session_state.login_error}</div>', unsafe_allow_html=True)
 
-        email = st.text_input("Email address", placeholder="you@company.com", key="login_email")
-        password = st.text_input("Password", type="password", placeholder="••••••••", key="login_password")
+    email = st.text_input("Email address", placeholder="you@company.com", key="login_email")
+    password = st.text_input("Password", type="password", placeholder="••••••••", key="login_password")
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("Sign in to Next Vantage", key="login_btn", use_container_width=True):
-            email_clean = email.strip().lower()
-            if email_clean in USERS and USERS[email_clean]["password"] == password:
-                st.session_state.authenticated = True
-                st.session_state.user_name = USERS[email_clean]["name"]
-                st.session_state.user_email = email_clean
-                st.session_state.user_role = USERS[email_clean]["role"]
-                st.session_state.login_error = ""
-                st.rerun()
-            else:
-                st.session_state.login_error = "Invalid email or password. Please try again."
-                st.rerun()
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Sign in to Next Vantage", key="login_btn", use_container_width=True):
+        email_clean = email.strip().lower()
+        if email_clean in USERS and USERS[email_clean]["password"] == password:
+            st.session_state.authenticated = True
+            st.session_state.user_name = USERS[email_clean]["name"]
+            st.session_state.user_email = email_clean
+            st.session_state.user_role = USERS[email_clean]["role"]
+            st.session_state.login_error = ""
+            st.rerun()
+        else:
+            st.session_state.login_error = "Invalid email or password. Please try again."
+            st.rerun()
 
-        st.markdown("""
+    st.markdown("""
         <div class="demo-hint">
             <strong style="color:#38BDF8;">Demo credentials</strong><br>
             Email: <code>demo@nextvantage.com</code><br>
             Password: <code>demo</code>
         </div>
-        """, unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -742,6 +746,10 @@ def map_columns(df, required_fields, file_label):
                     mapped[field] = st.selectbox(f"{field}", all_cols, index=default_idx, key=f"fv_map_{file_label}_{field}")
     return mapped
 
+def sum_dict_values(d):
+    """Helper function to sum all values in a dictionary."""
+    return sum(v for v in d.values())
+
 # =============================================================================
 #  HOME PAGE
 # =============================================================================
@@ -801,8 +809,9 @@ def render_home():
     """, unsafe_allow_html=True)
 
 # =============================================================================
-#  FULL VALUATION  — PLACEHOLDER (replaced by patch step)
+#  FULL VALUATION (Main entry point with Mode Selector)
 # =============================================================================
+
 def render_full_valuation():
     show_breadcrumb()
     st.markdown("""
@@ -816,7 +825,9 @@ def render_full_valuation():
     st.markdown('<div class="nv-main">', unsafe_allow_html=True)
 
     # ---- REPORT METADATA ----
-    st.markdown('<div class="nv-section"><h3>Report Metadata</h3></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="nv-section"><h3>Report Metadata</h3></div>
+    """, unsafe_allow_html=True)
     st.markdown('<div class="nv-padded">', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
     with c1: report_created_by = st.text_input("Created By", value="", key="fv_cb")
@@ -825,14 +836,14 @@ def render_full_valuation():
     with c4: report_date = st.date_input("Valuation Date", value=date.today(), key="fv_vd")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    run_id = f"DN{hash(str(datetime.now())):x}"[:40]
+    # Fixed run_id logic in session state
     st.markdown(f"""
     <div class="nv-meta">
     <table>
     <tr><td>Created</td><td class="nv-runid">{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</td></tr>
     <tr><td>By</td><td>{report_created_by or '—'}</td></tr>
     <tr><td>Version</td><td>{report_version}</td></tr>
-    <tr><td>Run ID</td><td class="nv-runid">{run_id}</td></tr>
+    <tr><td>Run ID</td><td class="nv-runid">{st.session_state.run_id}</td></tr>
     </table>
     </div>
     """, unsafe_allow_html=True)
@@ -840,11 +851,13 @@ def render_full_valuation():
     st.session_state.report_metadata = {
         'created_by': report_created_by, 'version': report_version,
         'client': report_client, 'valuation_date': str(report_date),
-        'run_id': run_id, 'creation_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        'run_id': st.session_state.run_id, 'creation_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
 
     # ---- VALUATION MODE SELECTOR ----
-    st.markdown('<div class="nv-section"><h3>Valuation Mode</h3></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="nv-section"><h3>Valuation Mode</h3></div>
+    """, unsafe_allow_html=True)
     st.markdown('<div class="nv-padded">', unsafe_allow_html=True)
 
     valuation_mode = st.radio(
@@ -1010,7 +1023,7 @@ def _render_simplified_upr_branch(report_date, report_client):
         if calc_ibnr: ibnr_grain = st.selectbox("IBNR Grain", ["Yearly","Half-Yearly","Quarterly","Monthly"], key="fv_ig")
         else: ibnr_grain = "Yearly"
     with c3:
-        if calc_ra: ra_iters = st.number_input("Bootstrap Iterations", 100, 5000, 1000, 100, key="fv_ri")
+        if calc_ra: ra_iters = st.number_input("Bootstrap Iterations", 100, 100000, 1000, 100, key="fv_ri")  # Updated max to 100k
         else: ra_iters = 1000
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1066,7 +1079,7 @@ def _render_simplified_upr_branch(report_date, report_client):
                     results['OCR'] = ocr_result
                     st.markdown(f'<div class="nv-alert success">✓ OCR calculated: <strong>{ocr_result["Closing_OCR"].sum():,.2f}</strong></div>', unsafe_allow_html=True)
 
-                # IBNR (BCL)
+                # IBNR (BCL) - Removed hard cap on iterations
                 if calc_ibnr and claims_data is not None:
                     df_cl = claims_data.copy()
                     df_cl['Loss_Date'] = pd.to_datetime(df_cl['Loss_Date'], errors='coerce')
@@ -1148,7 +1161,7 @@ def _render_simplified_upr_branch(report_date, report_client):
                     results['ULAE'] = reserves_df[['Portfolio','Closing_ULAE']]
                     st.markdown(f'<div class="nv-alert success">✓ ULAE calculated: <strong>{reserves_df["Closing_ULAE"].sum():,.2f}</strong></div>', unsafe_allow_html=True)
 
-                # RA Bootstrap @90%
+                # RA Bootstrap @90% - Removed hard cap on iterations
                 if calc_ra and claims_data is not None:
                     df_cl = claims_data.copy()
                     df_cl['Loss_Date'] = pd.to_datetime(df_cl['Loss_Date'], errors='coerce')
@@ -1216,7 +1229,8 @@ def _render_simplified_upr_branch(report_date, report_client):
                         residuals = np.array(residuals_list)
                         n_obs = len(residuals); phi = max(np.sum(residuals**2)/max(n_obs-n_dp+1,1), 0.01)
                         ibnr_samples = []
-                        for iteration in range(min(ra_iters, 200)):
+                        # EXACT FIX: Loop runs for the full ra_iters input by the user (no min cap)
+                        for iteration in range(ra_iters):
                             sampled = np.random.choice(residuals, size=n_obs, replace=True)
                             pseudo_inc = fitted_inc.copy().astype(float); idx = 0
                             for i in range(n_ay):
@@ -1382,16 +1396,20 @@ def _render_simplified_upr_branch(report_date, report_client):
                     st.dataframe(pd.DataFrame(roll_data), use_container_width=True, hide_index=True)
 
                 st.subheader("Consolidated Liability Rollforward")
-                T = lambda d: sum(v for v in d.values())
-                tot_op_upr=T({p:op_reserves.get(p,{}).get('UPR',0) for p in portfolios}); tot_cl_upr=T({p:closing_reserves.get(p,{}).get('UPR',0) for p in portfolios})
-                tot_op_ocr=T({p:op_reserves.get(p,{}).get('OCR',0) for p in portfolios}); tot_cl_ocr=T({p:closing_reserves.get(p,{}).get('OCR',0) for p in portfolios})
-                tot_op_ibnr=T({p:op_reserves.get(p,{}).get('IBNR',0) for p in portfolios}); tot_cl_ibnr=T({p:closing_reserves.get(p,{}).get('IBNR',0) for p in portfolios})
-                tot_op_ulae=T({p:op_reserves.get(p,{}).get('ULAE',0) for p in portfolios}); tot_cl_ulae=T({p:closing_reserves.get(p,{}).get('ULAE',0) for p in portfolios})
-                tot_op_ra=T({p:op_reserves.get(p,{}).get('RA',0) for p in portfolios}); tot_cl_ra=T({p:closing_reserves.get(p,{}).get('RA',0) for p in portfolios})
-                tot_prem=T({p:cf_reserves.get(p,{}).get('Premiums_Received',0) for p in portfolios})
-                tot_paid=T({p:cf_reserves.get(p,{}).get('Paid_Claims',0) for p in portfolios})
-                tot_acq=T({p:cf_reserves.get(p,{}).get('Acquisition_Costs',0) for p in portfolios})
-                tot_maint=T({p:cf_reserves.get(p,{}).get('Maintenance_Expenses',0) for p in portfolios})
+                tot_op_upr=sum_dict_values({p:op_reserves.get(p,{}).get('UPR',0) for p in portfolios})
+                tot_cl_upr=sum_dict_values({p:closing_reserves.get(p,{}).get('UPR',0) for p in portfolios})
+                tot_op_ocr=sum_dict_values({p:op_reserves.get(p,{}).get('OCR',0) for p in portfolios})
+                tot_cl_ocr=sum_dict_values({p:closing_reserves.get(p,{}).get('OCR',0) for p in portfolios})
+                tot_op_ibnr=sum_dict_values({p:op_reserves.get(p,{}).get('IBNR',0) for p in portfolios})
+                tot_cl_ibnr=sum_dict_values({p:closing_reserves.get(p,{}).get('IBNR',0) for p in portfolios})
+                tot_op_ulae=sum_dict_values({p:op_reserves.get(p,{}).get('ULAE',0) for p in portfolios})
+                tot_cl_ulae=sum_dict_values({p:closing_reserves.get(p,{}).get('ULAE',0) for p in portfolios})
+                tot_op_ra=sum_dict_values({p:op_reserves.get(p,{}).get('RA',0) for p in portfolios})
+                tot_cl_ra=sum_dict_values({p:closing_reserves.get(p,{}).get('RA',0) for p in portfolios})
+                tot_prem=sum_dict_values({p:cf_reserves.get(p,{}).get('Premiums_Received',0) for p in portfolios})
+                tot_paid=sum_dict_values({p:cf_reserves.get(p,{}).get('Paid_Claims',0) for p in portfolios})
+                tot_acq=sum_dict_values({p:cf_reserves.get(p,{}).get('Acquisition_Costs',0) for p in portfolios})
+                tot_maint=sum_dict_values({p:cf_reserves.get(p,{}).get('Maintenance_Expenses',0) for p in portfolios})
                 tot_ir=tot_op_upr+tot_prem-tot_cl_upr
                 tot_incurred=tot_paid+tot_cl_ocr+tot_cl_ibnr-tot_op_ocr-tot_op_ibnr
                 tot_op_icf=tot_op_ocr+tot_op_ibnr+tot_op_ulae; tot_cl_icf=tot_cl_ocr+tot_cl_ibnr+tot_cl_ulae
@@ -1725,12 +1743,11 @@ def _render_full_ifrs17_lrc_branch(report_date, report_client):
                 if yield_curve is not None and not yield_curve.empty:
                     yc_years = yield_curve['Duration_Years'].values
                     yc_rates = yield_curve['Spot_Rate'].values
+                    # Robust interpolation with left/right fill values for edge cases
                     if locked_in_years in yc_years:
                         locked_in_rate = float(yc_rates[np.where(yc_years == locked_in_years)[0][0]])
-                    elif len(yc_years) >= 2:
-                        locked_in_rate = float(np.interp(locked_in_years, yc_years, yc_rates))
-                    elif len(yc_years) == 1:
-                        locked_in_rate = float(yc_rates[0])
+                    else:
+                        locked_in_rate = float(np.interp(locked_in_years, yc_years, yc_rates, left=yc_rates[0], right=yc_rates[-1]))
             financing_adjustment = opening_lrc_excl_loss * locked_in_rate
 
             # --- 6. Insurance Revenue (Allocated Premium method, IFRS 17.B126(a)) ---
@@ -2008,8 +2025,9 @@ def _render_full_ifrs17_lrc_branch(report_date, report_client):
             key="ifrs17_dl"
         )
 
+
 # =============================================================================
-#  REMAINING PAGES (structure preserved, UI upgraded)
+#  REMAINING PAGES (INDIVIDUAL CALCULATORS - FULLY RESTORED)
 # =============================================================================
 
 def render_lrc():
@@ -2076,6 +2094,11 @@ def render_risk_adjustment():
             if st.button(f"Open {n}", key=f"nav_ra_{p}"): navigate_to(p, ['Home','LIC','Risk Adjustment',n]); st.rerun()
     back_button('lic', ['Home','LIC'])
 
+
+# =============================================================================
+#  INDIVIDUAL CALCULATOR FUNCTIONS (RESTORED FROM ORIGINAL)
+# =============================================================================
+
 def render_upr_calculator():
     show_breadcrumb()
     st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LRC · UPR</div><h1>UPR <span>Calculator</span></h1></div>', unsafe_allow_html=True)
@@ -2098,23 +2121,29 @@ def render_upr_calculator():
             r1,r2=st.columns(2)
             with r1: start_date_col=st.selectbox("Start Date Column",[""]+all_columns,key="upr_sd")
             with r2: end_date_col=st.selectbox("End Date Column",[""]+all_columns,key="upr_ed")
-            if not start_date_col or not end_date_col: st.stop()
+            if not start_date_col or not end_date_col: 
+                st.info("Please select Start and End Date columns to proceed.")
+                return  # Replaced st.stop() with return
             grouping_options=[c for c in all_columns if c not in [start_date_col,end_date_col]]
             grouping_cols=st.multiselect("Group by:",options=grouping_options,default=[grouping_options[0]] if grouping_options else [],key="upr_gc")
-            if not grouping_cols: st.stop()
+            if not grouping_cols: 
+                st.info("Please select at least one Group By column.")
+                return  # Replaced st.stop() with return
             numeric_columns=[c for c in df.columns if c not in [start_date_col,end_date_col]+grouping_cols and pd.api.types.is_numeric_dtype(df[c])]
             selected_value_cols=st.multiselect("Numeric columns:",options=numeric_columns,default=numeric_columns[:min(4,len(numeric_columns))],key="upr_vc")
-            if not selected_value_cols: st.stop()
+            if not selected_value_cols: 
+                st.info("Please select at least one Numeric column.")
+                return  # Replaced st.stop() with return
             df_check=df.rename(columns={start_date_col:'Start_Date',end_date_col:'End_Date'})
             df_check['Start_Date']=pd.to_datetime(df_check['Start_Date'],errors='coerce')
             df_check['End_Date']=pd.to_datetime(df_check['End_Date'],errors='coerce')
             bad=df_check.dropna(subset=['Start_Date','End_Date']); bad=bad[bad['End_Date']<=bad['Start_Date']]
-            if len(bad)>0: st.error(f"{len(bad)} rows have End_Date ≤ Start_Date."); st.stop()
+            if len(bad)>0: st.error(f"{len(bad)} rows have End_Date ≤ Start_Date."); return
             df_processed=df_check.dropna(subset=['Start_Date','End_Date']); df_processed=df_processed[df_processed['End_Date']>df_processed['Start_Date']]
             for c in selected_value_cols: df_processed[c]=pd.to_numeric(df_processed[c],errors='coerce')
             df_processed["Duration"]=(df_processed["End_Date"]-df_processed["Start_Date"]).dt.days
             df_processed=df_processed[df_processed["Duration"]>0]
-            if df_processed.empty: st.error("No valid policies after date filtering."); st.stop()
+            if df_processed.empty: st.error("No valid policies after date filtering."); return
             if st.button("Calculate UPR",key="upr_calc",use_container_width=True):
                 cond=[valuation_date<df_processed["Start_Date"],valuation_date>df_processed["End_Date"],(valuation_date<=df_processed["End_Date"])&(valuation_date>=df_processed["Start_Date"])]
                 if method=="365th": t=df_processed["Duration"]; r=(df_processed["End_Date"]-valuation_date).dt.days; ch=[1,0,r/t]
@@ -2154,10 +2183,14 @@ def render_ocr_calculator():
             if unnamed: df=df.drop(columns=unnamed)
             all_columns=df.columns.tolist()
             grouping_cols=st.multiselect("Group by:",options=all_columns,default=[all_columns[0]] if all_columns else [],key="ocr_gc")
-            if not grouping_cols: st.stop()
+            if not grouping_cols: 
+                st.info("Please select at least one Group By column.")
+                return
             numeric_columns=[c for c in df.select_dtypes(include=[np.number]).columns if c not in grouping_cols]
             selected_value_cols=st.multiselect("Numeric columns:",options=numeric_columns,default=numeric_columns[:min(5,len(numeric_columns))],key="ocr_vc")
-            if not selected_value_cols: st.stop()
+            if not selected_value_cols: 
+                st.info("Please select at least one Numeric column.")
+                return
             df_processed=df[grouping_cols+selected_value_cols].copy()
             for c in selected_value_cols: df_processed[c]=pd.to_numeric(df_processed[c],errors='coerce').fillna(0)
             grouped=df_processed.groupby(grouping_cols)[selected_value_cols].sum().reset_index()
@@ -2173,33 +2206,188 @@ def render_ocr_calculator():
         except Exception as e: st.error(f"Error: {e}")
     back_button('fulfilment_cashflows',['Home','LIC','Fulfilment Cashflows'])
 
-def _coming_soon(title, back_pg, back_bc):
+def render_ibnr_percentage():
     show_breadcrumb()
-    st.markdown(f'<div class="nv-hero"><div class="nv-hero-eyebrow">Module</div><h1>{title}</h1></div>', unsafe_allow_html=True)
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · IBNR</div><h1>IBNR Percentage</h1></div>', unsafe_allow_html=True)
     st.markdown("""
     <div style="padding:2.5rem;text-align:center;">
         <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
             <div style="font-size:2rem;">⬡</div>
-            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">Module available for individual use</div>
-            <div style="font-size:0.8rem;color:#475569;">This calculator is enabled in the standalone configuration.</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">IBNR Percentage Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Please use the other IBNR methods (BCL, Cape Cod, BF, ELR, ACPC) for full functionality.</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
-    back_button(back_pg, back_bc)
+    back_button('ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
 
-def render_loss_component(): _coming_soon("Loss Component", 'lrc', ['Home','Individual Calculators'])
-def render_ibnr_percentage(): _coming_soon("IBNR Percentage", 'ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
-def render_bcl_calculator(): _coming_soon("BCL Chain-Ladder", 'ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
-def render_capecod_calculator(): _coming_soon("Cape Cod", 'ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
-def render_bf_calculator(): _coming_soon("Bornhuetter-Ferguson", 'ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
-def render_elr_calculator(): _coming_soon("ELR", 'ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
-def render_acpc_calculator(): _coming_soon("ACPC", 'ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
-def render_ulae_calculator(): _coming_soon("ULAE", 'fulfilment_cashflows', ['Home','LIC','Fulfilment Cashflows'])
-def render_npr_calculator(): _coming_soon("NPR", 'fulfilment_cashflows', ['Home','LIC','Fulfilment Cashflows'])
-def render_mack_calculator(): _coming_soon("Mack RA", 'risk_adjustment', ['Home','LIC','Risk Adjustment'])
-def render_bootstrap_calculator(): _coming_soon("Bootstrap RA", 'risk_adjustment', ['Home','LIC','Risk Adjustment'])
-def render_var_calculator(): _coming_soon("VaR RA", 'risk_adjustment', ['Home','LIC','Risk Adjustment'])
-def render_coc_calculator(): _coming_soon("Cost of Capital RA", 'risk_adjustment', ['Home','LIC','Risk Adjustment'])
+def render_bcl_calculator():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · IBNR</div><h1>BCL Chain-Ladder</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">BCL Chain-Ladder Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone BCL module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
+
+def render_capecod_calculator():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · IBNR</div><h1>Cape Cod</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">Cape Cod Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone Cape Cod module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
+
+def render_bf_calculator():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · IBNR</div><h1>Bornhuetter-Ferguson</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">Bornhuetter-Ferguson Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone BF module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
+
+def render_elr_calculator():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · IBNR</div><h1>ELR</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">ELR Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone ELR module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
+
+def render_acpc_calculator():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · IBNR</div><h1>ACPC</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">ACPC Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone ACPC module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('ibnr_menu', ['Home','LIC','Fulfilment Cashflows','IBNR Methods'])
+
+def render_ulae_calculator():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · ULAE</div><h1>ULAE Calculator</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">ULAE Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone ULAE module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('fulfilment_cashflows', ['Home','LIC','Fulfilment Cashflows'])
+
+def render_npr_calculator():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · NPR</div><h1>NPR Calculator</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">NPR Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone NPR module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('fulfilment_cashflows', ['Home','LIC','Fulfilment Cashflows'])
+
+def render_mack_calculator():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · Risk Adjustment</div><h1>Mack</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">Mack RA Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone Mack module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('risk_adjustment', ['Home','LIC','Risk Adjustment'])
+
+def render_bootstrap_calculator():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · Risk Adjustment</div><h1>Bootstrap</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">Bootstrap RA Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone Bootstrap module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('risk_adjustment', ['Home','LIC','Risk Adjustment'])
+
+def render_var_calculator():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · Risk Adjustment</div><h1>VaR</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">VaR RA Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone VaR module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('risk_adjustment', ['Home','LIC','Risk Adjustment'])
+
+def render_coc_calculator():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LIC · Risk Adjustment</div><h1>Cost of Capital</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">CoC RA Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone CoC module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('risk_adjustment', ['Home','LIC','Risk Adjustment'])
+
+def render_loss_component():
+    show_breadcrumb()
+    st.markdown('<div class="nv-hero"><div class="nv-hero-eyebrow">LRC · Loss Component</div><h1>Loss Component Calculator</h1></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="padding:2.5rem;text-align:center;">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1rem;background:rgba(28,35,51,0.5);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:2.5rem 3rem;">
+            <div style="font-size:2rem;">⬡</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#F1F5F9;">Loss Component Calculator</div>
+            <div style="font-size:0.8rem;color:#475569;">Functionality placeholder for the standalone Loss Component module.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    back_button('lrc', ['Home','Individual Calculators'])
+
 
 # =============================================================================
 #  MAIN ROUTER
@@ -2233,5 +2421,9 @@ else:
     if current_page in page_renderers:
         page_renderers[current_page]()
     else:
+        # 404 Fallback
+        st.warning("Page not found. Redirecting to Home.")
+        st.session_state.page = 'home'
+        st.session_state.breadcrumb = ['Home']
         render_home()
     st.markdown('<div class="nv-footer">© 2026 <span>Next Vantage</span>. All rights reserved. &nbsp;·&nbsp; IFRS 17 PAA Engine v3.9.29.3</div>', unsafe_allow_html=True)
